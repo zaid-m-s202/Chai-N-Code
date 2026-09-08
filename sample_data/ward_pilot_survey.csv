@@ -1,0 +1,5 @@
+ulpin,type,building_seq,floor_seq,unit_seq,latitude,longitude,height,floor_count,confidence,use,source_id
+INMH0234567,unit,1,1,101,12.9718,77.5950,3.2,1,0.90,office,SURVEYOR_TAB_VERIFICATION
+INMH0234567,unit,1,1,102,12.9719,77.5951,3.2,1,0.88,retail,SURVEYOR_TAB_VERIFICATION
+INMH0234567,unit,1,2,201,12.9718,77.5950,3.2,1,0.85,residential,SURVEYOR_TAB_VERIFICATION
+INMH0234568,unit,1,1,101,12.9715,77.5965,3.5,1,0.92,residential,SURVEYOR_TAB_VERIFICATION

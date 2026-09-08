@@ -1,0 +1,61 @@
+"""PropertyObject — the central spatial entity.
+
+Maps to PRD §5.5 / §7.  Each row is a parcel, building, floor or unit.
+Soft-delete via ``superseded_by``; rows are never physically deleted
+(event-sourced history in ``change_events``).
+"""
+
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import (
+    Column, String, Float, DateTime, ForeignKey, Index, Text, Uuid, JSON,
+)
+from geoalchemy2 import Geometry
+
+from app.database import Base
+
+
+# ----- enumerations kept as plain strings for SQLite test compat -----
+PROPERTY_TYPES = ("parcel", "building", "floor", "unit")
+PROPERTY_STATUSES = ("SYNTHETIC", "INFERRED", "DERIVED", "PROVISIONAL", "VERIFIED")
+
+
+class PropertyObject(Base):
+    """Core spatial entity — identifies *space*, never an owner."""
+
+    __tablename__ = "property_objects"
+
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    type = Column(String(16), nullable=False)  # parcel | building | floor | unit
+    parent_id = Column(Uuid(as_uuid=True), ForeignKey("property_objects.id"), nullable=True)
+
+    # Immutable 3D Property ID  (PRD §5.5)
+    three_d_property_id = Column(String(64), unique=True, nullable=False, index=True)
+
+    # PostGIS geometry — nullable so tests can run on plain SQLite
+    geometry = Column(Geometry(geometry_type="GEOMETRY", srid=4326), nullable=True)
+
+    z_min = Column(Float, nullable=True)
+    z_max = Column(Float, nullable=True)
+
+    # Flexible attribute bag (PRD §7)
+    attributes = Column(JSON, nullable=True, default=dict)
+
+    # Evidence / quality fields
+    confidence = Column(Float, nullable=False, default=0.0)
+    status = Column(String(16), nullable=False, default="SYNTHETIC")
+    source_list = Column(JSON, nullable=True, default=list)  # list of evidence IDs
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    # Soft-delete: once superseded, the row is historical
+    superseded_by = Column(Uuid(as_uuid=True), ForeignKey("property_objects.id"), nullable=True)
+
+    __table_args__ = (
+        Index("ix_property_objects_type", "type"),
+        Index("ix_property_objects_status", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PropertyObject {self.three_d_property_id} [{self.type}/{self.status}]>"

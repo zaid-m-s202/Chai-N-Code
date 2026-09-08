@@ -1,0 +1,4 @@
+ulpin,type,building_seq,floor_seq,unit_seq,latitude,longitude,height,unit,confidence,survey_date,source_id
+INMH0234567,building,1,0,0,12.9720,77.5950,24.5,m,0.92,2026-03-15T10:00:00Z,DRONE_SURVEY_MUNICIPAL
+INMH0234567,building,1,0,0,12.9720,77.5950,42.0,m,0.85,2026-03-16T11:00:00Z,RADAR_ELEVATION_SURVEY
+INMH0234567,building,1,0,0,12.9720,77.5950,80,ft,0.88,2026-03-17T09:30:00Z,FIELD_INSPECTOR_APP

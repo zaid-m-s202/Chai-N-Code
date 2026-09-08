@@ -1,0 +1,14 @@
+[
+  {
+    "three_d_property_id": "INDEMO0001-B001-F01-U001",
+    "type": "unit",
+    "status": "PROVISIONAL",
+    "confidence": 0.88
+  },
+  {
+    "three_d_property_id": "INDEMO0001-B001-F02-U001",
+    "type": "unit",
+    "status": "INFERRED",
+    "confidence": 0.67
+  }
+]

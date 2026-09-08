@@ -1,0 +1,87 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [77.5945, 12.9715],
+            [77.5955, 12.9715],
+            [77.5955, 12.9725],
+            [77.5945, 12.9725],
+            [77.5945, 12.9715]
+          ]
+        ]
+      },
+      "properties": {
+        "ulpin": "INMH0234567",
+        "type": "building",
+        "building_seq": 1,
+        "floor_seq": 0,
+        "unit_seq": 0,
+        "height": 24.5,
+        "floor_count": 8,
+        "use": "commercial",
+        "confidence": 0.92,
+        "survey_date": "2026-03-15T10:00:00Z",
+        "source_id": "MUNICIPAL_DRONE_SURVEY_2026"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [77.5960, 12.9710],
+            [77.5970, 12.9710],
+            [77.5970, 12.9720],
+            [77.5960, 12.9720],
+            [77.5960, 12.9710]
+          ]
+        ]
+      },
+      "properties": {
+        "ulpin": "INMH0234568",
+        "type": "building",
+        "building_seq": 1,
+        "floor_seq": 0,
+        "unit_seq": 0,
+        "height": 14.0,
+        "floor_count": 4,
+        "use": "residential",
+        "confidence": 0.85,
+        "survey_date": "2026-03-16T14:30:00Z",
+        "source_id": "MUNICIPAL_DRONE_SURVEY_2026"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [77.5940, 12.9700],
+            [77.5980, 12.9700],
+            [77.5980, 12.9740],
+            [77.5940, 12.9740],
+            [77.5940, 12.9700]
+          ]
+        ]
+      },
+      "properties": {
+        "ulpin": "INMH0234567",
+        "type": "parcel",
+        "building_seq": 0,
+        "floor_seq": 0,
+        "unit_seq": 0,
+        "use": "mixed_zone",
+        "confidence": 0.98,
+        "survey_date": "2026-01-10T08:00:00Z",
+        "source_id": "REVENUE_CADASTRAL_MAP_2026"
+      }
+    }
+  ]
+}
