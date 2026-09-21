@@ -1,0 +1,363 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "title": "National 3D Cadastre - Subterranean Infrastructure Registry",
+    "crs": "EPSG:4326",
+    "vertical_datum": "EGM2008",
+    "stratum": "SUBTERRANEAN",
+    "count": 7
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ug-metro-tunnel-01",
+        "three_d_property_id": "27-21-11-719-UG-METRO-T01",
+        "name": "Pune Metro Underground Corridor (Line 1 - Sadashiv Section)",
+        "type": "tunnel",
+        "category": "METRO",
+        "stratum": "SUBTERRANEAN",
+        "utility_type": "Transit Tunnel",
+        "z_min": -24.0,
+        "z_max": -18.0,
+        "depth_below_surface_m": 18.0,
+        "thickness_m": 6.0,
+        "volume_m3": 14400.0,
+        "color": "#ef4444",
+        "status": "VERIFIED",
+        "confidence": 0.99,
+        "easement_status": "STATUTORY_TRANSIT_EASEMENT",
+        "diameter_m": 5.8,
+        "owner": "Maharashtra Metro Rail Corporation (MahaMetro)"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.844,
+              18.511
+            ],
+            [
+              73.8475,
+              18.5125
+            ],
+            [
+              73.8476,
+              18.5122
+            ],
+            [
+              73.8441,
+              18.5107
+            ],
+            [
+              73.844,
+              18.511
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ug-util-water-01",
+        "three_d_property_id": "27-21-11-719-UG-WATER-M100",
+        "name": "PMC Primary Water Trunk Main (1200mm M.S.)",
+        "type": "underground_utility",
+        "category": "WATER",
+        "stratum": "SUBTERRANEAN",
+        "utility_type": "Water Trunk Corridor",
+        "z_min": -7.5,
+        "z_max": -5.0,
+        "depth_below_surface_m": 5.0,
+        "thickness_m": 2.5,
+        "volume_m3": 3750.0,
+        "color": "#06b6d4",
+        "status": "VERIFIED",
+        "confidence": 0.96,
+        "easement_status": "MUNICIPAL_RIGHT_OF_WAY",
+        "pressure_bar": 12.0,
+        "owner": "Pune Municipal Corporation (Water Supply Dept)"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.8435,
+              18.5128
+            ],
+            [
+              73.848,
+              18.5132
+            ],
+            [
+              73.848,
+              18.513
+            ],
+            [
+              73.8435,
+              18.5126
+            ],
+            [
+              73.8435,
+              18.5128
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ug-util-power-01",
+        "three_d_property_id": "27-21-11-719-UG-POWER-C88",
+        "name": "MSEDCL 110kV EHV Underground Cable Duct Bank",
+        "type": "underground_utility",
+        "category": "POWER",
+        "stratum": "SUBTERRANEAN",
+        "utility_type": "High Voltage Power Vault",
+        "z_min": -4.2,
+        "z_max": -2.0,
+        "depth_below_surface_m": 2.0,
+        "thickness_m": 2.2,
+        "volume_m3": 2200.0,
+        "color": "#eab308",
+        "status": "VERIFIED",
+        "confidence": 0.98,
+        "easement_status": "UTILITY_CORRIDOR_RIGHT",
+        "voltage_kv": 110.0,
+        "owner": "Maharashtra State Electricity Distribution Co."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.8445,
+              18.5102
+            ],
+            [
+              73.847,
+              18.514
+            ],
+            [
+              73.8471,
+              18.5139
+            ],
+            [
+              73.8446,
+              18.5101
+            ],
+            [
+              73.8445,
+              18.5102
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ug-util-telecom-01",
+        "three_d_property_id": "27-21-11-719-UG-UTIL-FIBER01",
+        "name": "National Telecom & Smart City OFC Trench",
+        "type": "underground_utility",
+        "category": "UTIL",
+        "stratum": "SUBTERRANEAN",
+        "utility_type": "Telecom Conduit",
+        "z_min": -2.5,
+        "z_max": -1.2,
+        "depth_below_surface_m": 1.2,
+        "thickness_m": 1.3,
+        "volume_m3": 1300.0,
+        "color": "#a855f7",
+        "status": "VERIFIED",
+        "confidence": 0.95,
+        "easement_status": "TELECOM_WAYLEAVE",
+        "conduits_count": 12,
+        "owner": "Smart City Development Corporation"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.8438,
+              18.5115
+            ],
+            [
+              73.8472,
+              18.5118
+            ],
+            [
+              73.8472,
+              18.5117
+            ],
+            [
+              73.8438,
+              18.5114
+            ],
+            [
+              73.8438,
+              18.5115
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ug-util-drain-01",
+        "three_d_property_id": "27-21-11-719-UG-SEWER-SW01",
+        "name": "Sadashiv Peth Deep Stormwater Relief Conduit",
+        "type": "underground_utility",
+        "category": "SEWER",
+        "stratum": "SUBTERRANEAN",
+        "utility_type": "Stormwater Vault",
+        "z_min": -13.0,
+        "z_max": -9.5,
+        "depth_below_surface_m": 9.5,
+        "thickness_m": 3.5,
+        "volume_m3": 5250.0,
+        "color": "#3b82f6",
+        "status": "DERIVED",
+        "confidence": 0.91,
+        "easement_status": "MUNICIPAL_DRAINAGE_RESERVE",
+        "owner": "Pune Municipal Drainage Department"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.8448,
+              18.5135
+            ],
+            [
+              73.8465,
+              18.5105
+            ],
+            [
+              73.8467,
+              18.5106
+            ],
+            [
+              73.845,
+              18.5136
+            ],
+            [
+              73.8448,
+              18.5135
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ug-basement-b01-p01",
+        "three_d_property_id": "27-21-02-876-B001-B01-P001",
+        "name": "Regency Meadows - Basement Level B1 Parking Slot P-01",
+        "type": "parking_basement",
+        "category": "PARKING",
+        "stratum": "SUBTERRANEAN",
+        "utility_type": "Dedicated Resident Parking",
+        "z_min": -3.0,
+        "z_max": 0.0,
+        "depth_below_surface_m": 0.0,
+        "thickness_m": 3.0,
+        "volume_m3": 37.5,
+        "color": "#64748b",
+        "status": "VERIFIED",
+        "confidence": 0.98,
+        "rights_type": "strata_title",
+        "building_id": 1,
+        "basement_level": 1,
+        "slot_number": 1
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.90485,
+              18.6022
+            ],
+            [
+              73.90495,
+              18.6022
+            ],
+            [
+              73.90495,
+              18.6021
+            ],
+            [
+              73.90485,
+              18.6021
+            ],
+            [
+              73.90485,
+              18.6022
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "ug-basement-b02-p01",
+        "three_d_property_id": "27-21-02-876-B001-B02-P001",
+        "name": "Regency Meadows - Basement Level B2 Mechanical Parking P-01",
+        "type": "parking_basement",
+        "category": "PARKING",
+        "stratum": "SUBTERRANEAN",
+        "utility_type": "Subsurface Stack Parking",
+        "z_min": -6.0,
+        "z_max": -3.0,
+        "depth_below_surface_m": 3.0,
+        "thickness_m": 3.0,
+        "volume_m3": 37.5,
+        "color": "#475569",
+        "status": "VERIFIED",
+        "confidence": 0.97,
+        "rights_type": "strata_title",
+        "building_id": 1,
+        "basement_level": 2,
+        "slot_number": 1
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.90485,
+              18.6022
+            ],
+            [
+              73.90495,
+              18.6022
+            ],
+            [
+              73.90495,
+              18.6021
+            ],
+            [
+              73.90485,
+              18.6021
+            ],
+            [
+              73.90485,
+              18.6022
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

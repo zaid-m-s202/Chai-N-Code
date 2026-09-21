@@ -1,52 +1,215 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { api, PropertyDetail } from "../api/client";
+import { ObjectDetailDrawer, BuildingFeature } from "../components/ObjectDetailDrawer";
+import { MultiSensorIngestModal } from "../components/MultiSensorIngestModal";
+import { AiCadastralStudioModal } from "../components/AiCadastralStudioModal";
 
-type MapViewMode = "2d" | "3d_extruded" | "cesium";
+// ── Props ─────────────────────────────────────────────────────────────────────
+interface MapPageProps {
+  currentRole?: string;
+}
 
-export const MapPage: React.FC = () => {
-  const [geoData, setGeoData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<MapViewMode>("3d_extruded");
-  const [selectedFeature, setSelectedFeature] = useState<any>(null);
-  const [featureDetail, setFeatureDetail] = useState<PropertyDetail | null>(null);
-  const [webglSupported, setWebglSupported] = useState(true);
-  const [layerParcels, setLayerParcels] = useState(true);
-  const [layerBuildings, setLayerBuildings] = useState(true);
+type MapViewMode = "2d" | "3d_extruded" | "3d_units" | "cesium";
+type StratumFilter = "ALL" | "SUBTERRANEAN" | "SURFACE" | "ABOVE_GROUND";
+
+// ── Pune pilot extent (Savitribai Phule Pune University SCMS Campus) ─────────
+export const PUNE_PILOT_CENTER: [number, number] = [73.82934, 18.54866];
+export const PUNE_PILOT_ZOOM = 17.5;
+export const PUNE_PILOT_PITCH = 58;
+export const PUNE_PILOT_BEARING = -22;
+
+export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFICER" }) => {
+  const [geoData, setGeoData]           = useState<any>(null);
+  const [unitsData, setUnitsData]       = useState<any>(null);
+  const [undergroundData, setUndergroundData] = useState<any>(null);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState<string | null>(null);
+  const [viewMode, setViewMode]         = useState<MapViewMode>("3d_units");
+  const [stratumFilter, setStratumFilter] = useState<StratumFilter>("ALL");
+  const [selectedFeature, setSelectedFeature] = useState<BuildingFeature | null>(null);
+  const [webglSupported, setWebglSupported]   = useState(true);
+  const [layerBuildings, setLayerBuildings]   = useState(true);
+  const [layerUnderground, setLayerUnderground] = useState(false);
+  const [searchQuery, setSearchQuery]         = useState("");
+  const [explosionGap, setExplosionGap] = useState<number>(0); // default 0m Stacked view matching Photo 1
+  const [selectedFloor, setSelectedFloor] = useState<string>("ALL"); // "ALL", "-1", "1", "2", "3", "4+"
+
+  const [dataSource, setDataSource]   = useState<"api" | "static">("api");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [uploading, setUploading]     = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+
+  const [showMultiSensorModal, setShowMultiSensorModal] = useState(false);
+  const [showAiStudioModal, setShowAiStudioModal] = useState(false);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapRef          = useRef<maplibregl.Map | null>(null);
+
+  // ── 1. Load cadastral buildings & units (API first, static fallback) ─────
+  const loadMapData = async () => {
+    setLoading(true);
+    setError(null);
+    let uData: any = null;
+    let bldgData: any = null;
+    let fromApi = false;
+
+    // A. Try live backend API for 3D units
+    try {
+      const res = await fetch("/api/v1/map/units?limit=50000");
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.features && json.features.length > 0) {
+          uData = json;
+          fromApi = true;
+          console.log(`Loaded ${json.features.length} units from Live Database API.`);
+        }
+      }
+    } catch (e) {
+      console.warn("Backend /map/units not reachable, falling back to static file:", e);
+    }
+
+    // B. Fallback to static units file if API had 0 features or failed
+    if (!uData) {
+      try {
+        const res = await fetch("/cadastral_3d_units.geojson");
+        if (res.ok) {
+          uData = await res.json();
+          console.log("Loaded units from static cadastral_3d_units.geojson fallback.");
+        }
+      } catch (e) {
+        console.warn("Static units file not reachable:", e);
+      }
+    }
+
+    // C. Load building footprints
+    try {
+      const res = await fetch("/cadastral_3d_buildings.geojson");
+      if (res.ok) {
+        bldgData = await res.json();
+      }
+    } catch (e) {
+      console.warn("Buildings file not reachable:", e);
+    }
+
+    // D. Load underground infrastructure (API first, static fallback)
+    let ugData: any = null;
+    try {
+      const res = await fetch("/api/v1/map/underground?limit=5000");
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.features && json.features.length > 0) {
+          ugData = json;
+        }
+      }
+    } catch (e) {
+      console.warn("Underground API endpoint not reachable:", e);
+    }
+
+    if (!ugData) {
+      try {
+        const res = await fetch("/underground_infrastructure.geojson");
+        if (res.ok) {
+          ugData = await res.json();
+        }
+      } catch (e) {
+        console.warn("Static underground file not reachable:", e);
+      }
+    }
+
+    if (bldgData) setGeoData(bldgData);
+    if (uData) {
+      setUnitsData(uData);
+      setDataSource(fromApi ? "api" : "static");
+    }
+    if (ugData) {
+      setUndergroundData(ugData);
+    }
+    if (!bldgData && !uData) {
+      setError("Could not load cadastral datasets from API or static storage.");
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    api.getMapObjects()
-      .then((data) => {
-        setGeoData(data);
-      })
-      .catch(() => setGeoData(null))
-      .finally(() => setLoading(false));
+    loadMapData();
   }, []);
 
-  // When a feature is selected, fetch its full detail
-  useEffect(() => {
-    if (selectedFeature?.properties?.three_d_property_id) {
-      api.getProperty(selectedFeature.properties.three_d_property_id)
-        .then(setFeatureDetail)
-        .catch(() => setFeatureDetail(null));
-    } else {
-      setFeatureDetail(null);
-    }
-  }, [selectedFeature]);
+  // ── Refresh data from Database API ───────────────────────────────────────
+  const refreshFromDb = async () => {
+    setIsRefreshing(true);
+    setUploadStatus("Querying fresh 3D property records & subterranean assets from database...");
+    try {
+      const res = await fetch("/api/v1/map/units?limit=50000");
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.features && json.features.length > 0) {
+          setUnitsData(json);
+          setDataSource("api");
+        }
+      }
 
-  // Initialize MapLibre GL
+      // Also refresh underground infrastructure
+      const ugRes = await fetch("/api/v1/map/underground?limit=5000").catch(() => null);
+      if (ugRes && ugRes.ok) {
+        const ugJson = await ugRes.json();
+        if (ugJson && ugJson.features) {
+          setUndergroundData(ugJson);
+        }
+      }
+
+      setUploadStatus("Refreshed! Synchronized 3D cadastre & underground infrastructure from live database.");
+      setTimeout(() => setUploadStatus(null), 5000);
+    } catch (err: any) {
+      setUploadStatus(`Refresh error: ${err.message}`);
+      setTimeout(() => setUploadStatus(null), 5000);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // ── Quick Ingestion from Map View ─────────────────────────────────────────
+  const handleQuickIngest = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadStatus(`Uploading ${file.name} to ingestion pipeline...`);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("source_system", "field_survey_upload");
+
+    try {
+      const res = await fetch("/api/v1/ingestion/jobs?async_exec=false", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Upload failed with HTTP ${res.status}`);
+      }
+      const job = await res.json();
+      setUploadStatus(
+        `✅ Ingestion complete! Job #${job.id.slice(0, 8)}: ${job.record_count ?? 0} records fused with provenance.`
+      );
+      await refreshFromDb();
+    } catch (err: any) {
+      setUploadStatus(`❌ Ingestion failed: ${err.message}`);
+      setTimeout(() => setUploadStatus(null), 7000);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+
+  // ── 2. Initialise MapLibre GL ─────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainerRef.current || viewMode === "cesium") return;
 
+    let map: maplibregl.Map;
     try {
-      // Default to Jaipur pilot center
-      const defaultCenter: [number, number] = [75.805, 26.915];
-
-      const map = new maplibregl.Map({
+      map = new maplibregl.Map({
         container: mapContainerRef.current,
         style: {
           version: 8,
@@ -58,168 +221,579 @@ export const MapPage: React.FC = () => {
               attribution: "&copy; OpenStreetMap contributors",
             },
           },
-          layers: [
-            {
-              id: "osm-tiles",
-              type: "raster",
-              source: "osm",
-              minzoom: 0,
-              maxzoom: 19,
-            },
-          ],
+          layers: [{ id: "osm-tiles", type: "raster", source: "osm" }],
         },
-        center: defaultCenter,
-        zoom: 16,
-        pitch: viewMode === "3d_extruded" ? 55 : 0,
-        bearing: viewMode === "3d_extruded" ? -25 : 0,
+        center: PUNE_PILOT_CENTER,
+        zoom: PUNE_PILOT_ZOOM,
+        pitch: viewMode === "2d" ? 0 : PUNE_PILOT_PITCH,
+        bearing: viewMode === "2d" ? 0 : PUNE_PILOT_BEARING,
       });
 
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+      map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
       map.on("load", () => {
         if (!geoData) return;
 
-        // Add Cadastral GeoJSON source
-        if (!map.getSource("cadastral-data")) {
-          map.addSource("cadastral-data", {
+        // ── A. Buildings source ──────────────────────────────────────────────
+        map.addSource("cadastral_3d_buildings", {
+          type: "geojson",
+          data: geoData,
+        });
+
+        // ── B. Units source ──────────────────────────────────────────────────
+        if (unitsData) {
+          map.addSource("cadastral_3d_units", {
             type: "geojson",
-            data: geoData,
+            data: unitsData,
           });
         }
 
-        // 1. Parcel 2D Fill Layer
-        map.addLayer({
-          id: "cadastral-parcels-fill",
-          type: "fill",
-          source: "cadastral-data",
-          filter: ["==", ["get", "type"], "parcel"],
-          paint: {
-            "fill-color": "#2563eb",
-            "fill-opacity": 0.25,
-          },
-        });
+        // ── C. Underground infrastructure source ──────────────────────────────
+        if (undergroundData) {
+          map.addSource("underground_infrastructure", {
+            type: "geojson",
+            data: undergroundData,
+          });
+        }
 
-        // 2. Parcel Outline Layer
+        // ── 1. Black dashed outlines (Standard cadastral footprint styling for 2D mode) ───
         map.addLayer({
-          id: "cadastral-parcels-line",
+          id: "cadastral-buildings-dashed-outline",
           type: "line",
-          source: "cadastral-data",
-          filter: ["==", ["get", "type"], "parcel"],
+          source: "cadastral_3d_buildings",
           paint: {
-            "line-color": "#1d4ed8",
-            "line-width": 2,
+            "line-color": "#000000",
+            "line-width": 1.5,
+            "line-dasharray": [3, 2],
+          },
+          layout: {
+            visibility: viewMode === "2d" ? "visible" : "none",
           },
         });
 
-        // 3. 3D Building Extrusion Layer
+        // ── 2. Standard 3D Building Envelopes (Clean architectural massing) ────
         map.addLayer({
-          id: "cadastral-buildings-extrusion",
+          id: "cadastral-buildings-3d",
           type: "fill-extrusion",
-          source: "cadastral-data",
-          filter: ["!=", ["get", "type"], "parcel"],
+          source: "cadastral_3d_buildings",
           paint: {
-            "fill-extrusion-color": [
-              "case",
-              ["==", ["get", "status"], "VERIFIED"],
-              "#059669",
-              ["==", ["get", "status"], "PROVISIONAL"],
-              "#d97706",
-              "#3b82f6",
-            ],
-            "fill-extrusion-height": [
-              "coalesce",
-              ["get", "height"],
-              ["get", "height_m"],
-              18,
-            ],
+            "fill-extrusion-color": "#94a3b8",
+            "fill-extrusion-height": ["coalesce", ["get", "height"], 3],
             "fill-extrusion-base": 0,
             "fill-extrusion-opacity": 0.85,
           },
+          layout: {
+            visibility: viewMode === "3d_extruded" && layerBuildings ? "visible" : "none",
+          },
         });
 
-        // Click handler for interactive selection
-        map.on("click", "cadastral-buildings-extrusion", (e: any) => {
-          if (e.features && e.features[0]) {
-            setSelectedFeature(e.features[0]);
-          }
+        // ── 3. Flat footprint highlight for 2D mode ──────────────────────────
+        map.addLayer({
+          id: "cadastral-buildings-flat",
+          type: "fill",
+          source: "cadastral_3d_buildings",
+          paint: {
+            "fill-color": "#94a3b8",
+            "fill-opacity": 0.65,
+          },
+          layout: {
+            visibility: viewMode === "2d" ? "visible" : "none",
+          },
         });
 
-        map.on("click", "cadastral-parcels-fill", (e: any) => {
-          if (e.features && e.features[0]) {
-            setSelectedFeature(e.features[0]);
-          }
+        // ── 4. Translucent Glass Building Envelope (for Unit Explorer) ────────
+        map.addLayer({
+          id: "cadastral-building-envelope-glass",
+          type: "fill-extrusion",
+          source: "cadastral_3d_buildings",
+          paint: {
+            "fill-extrusion-color": "#38bdf8",
+            "fill-extrusion-height": ["coalesce", ["get", "height"], 9],
+            "fill-extrusion-base": 0,
+            "fill-extrusion-opacity": 0.16,
+          },
+          layout: {
+            visibility: viewMode === "3d_units" && layerBuildings ? "visible" : "none",
+          },
         });
 
-        map.on("mouseenter", "cadastral-buildings-extrusion", () => {
-          map.getCanvas().style.cursor = "pointer";
-        });
-        map.on("mouseleave", "cadastral-buildings-extrusion", () => {
-          map.getCanvas().style.cursor = "";
-        });
-
-        // Fit bounds if features exist
-        if (geoData.features && geoData.features.length > 0) {
-          const bounds = new maplibregl.LngLatBounds();
-          geoData.features.forEach((feat: any) => {
-            const geom = feat.geometry;
-            if (geom?.type === "Polygon" && geom.coordinates) {
-              geom.coordinates[0].forEach((coord: [number, number]) => {
-                bounds.extend(coord);
-              });
-            } else if (geom?.type === "Point" && geom.coordinates) {
-              bounds.extend(geom.coordinates as [number, number]);
-            }
+        // ── 5. 3D Floor & Unit Extrusion with Exploded Separation ────────────
+        if (unitsData) {
+          const gap = explosionGap;
+          map.addLayer({
+            id: "cadastral-units-3d",
+            type: "fill-extrusion",
+            source: "cadastral_3d_units",
+            paint: {
+              "fill-extrusion-color": ["coalesce", ["get", "color"], "#f59e0b"],
+              "fill-extrusion-base": [
+                "+",
+                ["coalesce", ["get", "z_min"], 0],
+                [
+                  "*",
+                  [
+                    "case",
+                    ["==", ["get", "floor_number"], -1], -1,
+                    [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
+                    0,
+                  ],
+                  gap,
+                ],
+              ],
+              "fill-extrusion-height": [
+                "+",
+                ["coalesce", ["get", "z_max"], 3],
+                [
+                  "*",
+                  [
+                    "case",
+                    ["==", ["get", "floor_number"], -1], -1,
+                    [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
+                    0,
+                  ],
+                  gap,
+                ],
+              ],
+              "fill-extrusion-opacity": 0.92,
+            },
+            layout: {
+              visibility: viewMode === "3d_units" ? "visible" : "none",
+            },
           });
-          if (!bounds.isEmpty()) {
-            map.fitBounds(bounds, { padding: 80, maxZoom: 17 });
+
+          // Unit line boundary
+          map.addLayer({
+            id: "cadastral-units-outline",
+            type: "line",
+            source: "cadastral_3d_units",
+            paint: {
+              "line-color": "#0f172a",
+              "line-width": 1.2,
+              "line-opacity": 0.5,
+            },
+            layout: {
+              visibility: viewMode === "3d_units" ? "visible" : "none",
+            },
+          });
+
+          // Unit selected highlight layer
+          map.addLayer({
+            id: "cadastral-unit-selected",
+            type: "line",
+            source: "cadastral_3d_units",
+            filter: ["==", "three_d_property_id", ""],
+            paint: {
+              "line-color": "#ef4444",
+              "line-width": 3,
+            },
+          });
+        }
+
+        // ── 6. Selected building outline ─────────────────────────────────────
+        map.addLayer({
+          id: "cadastral-buildings-selected",
+          type: "line",
+          source: "cadastral_3d_buildings",
+          filter: ["==", "three_d_property_id", ""],
+          paint: {
+            "line-color": "#b91c1c",
+            "line-width": 3,
+          },
+        });
+
+        // ── 7. Underground Subterranean Infrastructure 3D & Outline Layers ──
+        if (undergroundData) {
+          map.addLayer({
+            id: "underground-infrastructure-3d",
+            type: "fill-extrusion",
+            source: "underground_infrastructure",
+            paint: {
+              "fill-extrusion-color": ["coalesce", ["get", "color"], "#ef4444"],
+              "fill-extrusion-height": [
+                "+",
+                ["abs", ["-", ["coalesce", ["get", "z_max"], 0], ["coalesce", ["get", "z_min"], -5]]],
+                2,
+              ],
+              "fill-extrusion-base": 0,
+              "fill-extrusion-opacity": 0.85,
+            },
+            layout: {
+              visibility: layerUnderground ? "visible" : "none",
+            },
+          });
+
+          map.addLayer({
+            id: "underground-infrastructure-outline",
+            type: "line",
+            source: "underground_infrastructure",
+            paint: {
+              "line-color": ["coalesce", ["get", "color"], "#ef4444"],
+              "line-width": 2.5,
+              "line-dasharray": [2, 1],
+            },
+            layout: {
+              visibility: layerUnderground ? "visible" : "none",
+            },
+          });
+
+          // Click on underground infrastructure
+          map.on("click", "underground-infrastructure-3d", (e: any) => {
+            const feat = e.features?.[0];
+            if (!feat) return;
+            const threeD_id = feat.properties?.three_d_property_id || feat.properties?.id;
+            setSelectedFeature({
+              type: "Feature",
+              properties: {
+                ...feat.properties,
+                three_d_property_id: threeD_id,
+                stratum: "SUBTERRANEAN",
+              },
+              geometry: feat.geometry,
+            });
+          });
+
+          map.on("mouseenter", "underground-infrastructure-3d", () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", "underground-infrastructure-3d", () => {
+            map.getCanvas().style.cursor = "";
+          });
+        }
+
+        // ── 7. Click & Hover Handlers ────────────────────────────────────────
+        // Click on 3D Units
+        if (unitsData) {
+          map.on("click", "cadastral-units-3d", (e: any) => {
+            const feat = e.features?.[0];
+            if (!feat) return;
+
+            const uipin = feat.properties?.UIPIN || feat.properties?.three_d_property_id;
+            console.log("3D Unit clicked:", {
+              uipin,
+              unit_number: feat.properties?.unit_number,
+              floor_name: feat.properties?.floor_name,
+              z_min: feat.properties?.z_min,
+              z_max: feat.properties?.z_max,
+            });
+
+            if (uipin && map.getLayer("cadastral-unit-selected")) {
+              map.setFilter("cadastral-unit-selected", ["==", "three_d_property_id", uipin]);
+            }
+
+            const unitFeature: BuildingFeature = {
+              type: "Feature",
+              properties: { ...feat.properties, three_d_property_id: uipin },
+              geometry: feat.geometry,
+            };
+            setSelectedFeature(unitFeature);
+          });
+
+          map.on("mouseenter", "cadastral-units-3d", () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", "cadastral-units-3d", () => {
+            map.getCanvas().style.cursor = "";
+          });
+        }
+
+        // Click on Buildings
+        const bldgLayers = ["cadastral-buildings-3d", "cadastral-buildings-flat"];
+        bldgLayers.forEach((layer) => {
+          map.on("click", layer, (e: any) => {
+            const feat = e.features?.[0];
+            if (!feat) return;
+
+            const three_d_property_id = feat.properties?.three_d_property_id;
+            const ulpin = feat.properties?.ULPIN;
+
+            if (three_d_property_id && map.getLayer("cadastral-buildings-selected")) {
+              map.setFilter("cadastral-buildings-selected", ["==", "three_d_property_id", three_d_property_id]);
+            }
+
+            const fullFeature = geoData?.features?.find(
+              (f: any) =>
+                (three_d_property_id && f.properties?.three_d_property_id === three_d_property_id) ||
+                (ulpin && f.properties?.ULPIN === ulpin)
+            );
+
+            setSelectedFeature(fullFeature ?? (feat as BuildingFeature));
+          });
+
+          map.on("mouseenter", layer, () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", layer, () => {
+            map.getCanvas().style.cursor = "";
+          });
+        });
+
+        // ── 8. Focus on Pilot Building (SCMS Pune Univ) exactly as in Photo 1 ──
+        map.jumpTo({
+          center: PUNE_PILOT_CENTER,
+          zoom: PUNE_PILOT_ZOOM,
+          pitch: PUNE_PILOT_PITCH,
+          bearing: PUNE_PILOT_BEARING,
+        });
+
+        // Pre-select Unit 1B of SCMS building to replicate the clear systematic view in Photo 1
+        const defaultUnitId = "27-21-13-255-000022-B001-F01-U012";
+        const defaultUnit = unitsData?.features?.find(
+          (f: any) => f.properties?.three_d_property_id === defaultUnitId
+        );
+        if (defaultUnit) {
+          setSelectedFeature(defaultUnit as BuildingFeature);
+          if (map.getLayer("cadastral-unit-selected")) {
+            map.setFilter("cadastral-unit-selected", ["==", "three_d_property_id", defaultUnitId]);
           }
         }
       });
 
       mapRef.current = map;
-
-      return () => {
-        map.remove();
-        mapRef.current = null;
-      };
     } catch (err) {
-      console.warn("WebGL / MapLibre init issue, using fallback renderer:", err);
+      console.warn("WebGL init failed, using fallback:", err);
       setWebglSupported(false);
     }
-  }, [geoData, viewMode]);
 
-  // Handle mode changes on existing map
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geoData, unitsData, viewMode]);
+
+  // ── 3. Dynamic Exploded View Separation Update ────────────────────────────
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !m.isStyleLoaded() || !m.getLayer("cadastral-units-3d")) return;
+
+    const gap = explosionGap;
+    const baseExpr: maplibregl.ExpressionSpecification = [
+      "+",
+      ["coalesce", ["get", "z_min"], 0],
+      [
+        "*",
+        [
+          "case",
+          ["==", ["get", "floor_number"], -1], -1,
+          [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
+          0,
+        ],
+        gap,
+      ],
+    ];
+
+    const heightExpr: maplibregl.ExpressionSpecification = [
+      "+",
+      ["coalesce", ["get", "z_max"], 3],
+      [
+        "*",
+        [
+          "case",
+          ["==", ["get", "floor_number"], -1], -1,
+          [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
+          0,
+        ],
+        gap,
+      ],
+    ];
+
+    try {
+      m.setPaintProperty("cadastral-units-3d", "fill-extrusion-base", baseExpr);
+      m.setPaintProperty("cadastral-units-3d", "fill-extrusion-height", heightExpr);
+    } catch (e) {
+      console.warn("Failed to update explosion paint:", e);
+    }
+  }, [explosionGap]);
+
+  // ── 4. Dynamic Floor Level Filter Update ──────────────────────────────────
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !m.isStyleLoaded() || !m.getLayer("cadastral-units-3d")) return;
+
+    try {
+      if (selectedFloor === "ALL") {
+        m.setFilter("cadastral-units-3d", null);
+      } else if (selectedFloor === "4+") {
+        m.setFilter("cadastral-units-3d", [">=", ["get", "floor_number"], 4]);
+      } else {
+        const flNum = parseInt(selectedFloor, 10);
+        m.setFilter("cadastral-units-3d", ["==", ["get", "floor_number"], flNum]);
+      }
+    } catch (e) {
+      console.warn("Failed to filter floor:", e);
+    }
+  }, [selectedFloor]);
+
+  // ── 4b. Subterranean Infrastructure Layer Toggle Sync ─────────────────────
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !m.isStyleLoaded()) return;
+    ["underground-infrastructure-3d", "underground-infrastructure-outline"].forEach((id) => {
+      try {
+        if (m.getLayer(id)) {
+          m.setLayoutProperty(id, "visibility", layerUnderground ? "visible" : "none");
+        }
+      } catch (_) {}
+    });
+  }, [layerUnderground]);
+
+  // ── 4c. Stratum Classification Filter (SURFACE, ABOVE_GROUND, SUBTERRANEAN) ──
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !m.isStyleLoaded()) return;
+
+    try {
+      if (stratumFilter === "ALL") {
+        if (m.getLayer("cadastral-units-3d")) m.setLayoutProperty("cadastral-units-3d", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
+        if (m.getLayer("cadastral-units-outline")) m.setLayoutProperty("cadastral-units-outline", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
+        if (m.getLayer("cadastral-building-envelope-glass")) m.setLayoutProperty("cadastral-building-envelope-glass", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
+        if (m.getLayer("cadastral-buildings-3d")) m.setLayoutProperty("cadastral-buildings-3d", "visibility", (viewMode === "3d_extruded" && layerBuildings) ? "visible" : "none");
+        if (m.getLayer("underground-infrastructure-3d")) m.setLayoutProperty("underground-infrastructure-3d", "visibility", layerUnderground ? "visible" : "none");
+      } else if (stratumFilter === "SUBTERRANEAN") {
+        if (m.getLayer("cadastral-units-3d")) m.setLayoutProperty("cadastral-units-3d", "visibility", "none");
+        if (m.getLayer("cadastral-units-outline")) m.setLayoutProperty("cadastral-units-outline", "visibility", "none");
+        if (m.getLayer("cadastral-building-envelope-glass")) m.setLayoutProperty("cadastral-building-envelope-glass", "visibility", "none");
+        if (m.getLayer("cadastral-buildings-3d")) m.setLayoutProperty("cadastral-buildings-3d", "visibility", "none");
+        if (m.getLayer("underground-infrastructure-3d")) m.setLayoutProperty("underground-infrastructure-3d", "visibility", "visible");
+        m.easeTo({ pitch: 65, duration: 600 });
+      } else if (stratumFilter === "SURFACE") {
+        if (m.getLayer("cadastral-units-3d")) m.setLayoutProperty("cadastral-units-3d", "visibility", "none");
+        if (m.getLayer("cadastral-units-outline")) m.setLayoutProperty("cadastral-units-outline", "visibility", "none");
+        if (m.getLayer("cadastral-building-envelope-glass")) m.setLayoutProperty("cadastral-building-envelope-glass", "visibility", "none");
+        if (m.getLayer("underground-infrastructure-3d")) m.setLayoutProperty("underground-infrastructure-3d", "visibility", "none");
+        if (m.getLayer("cadastral-buildings-flat")) m.setLayoutProperty("cadastral-buildings-flat", "visibility", "visible");
+        m.easeTo({ pitch: 0, duration: 600 });
+      } else if (stratumFilter === "ABOVE_GROUND") {
+        if (m.getLayer("cadastral-units-3d")) m.setLayoutProperty("cadastral-units-3d", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
+        if (m.getLayer("cadastral-units-outline")) m.setLayoutProperty("cadastral-units-outline", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
+        if (m.getLayer("cadastral-building-envelope-glass")) m.setLayoutProperty("cadastral-building-envelope-glass", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
+        if (m.getLayer("underground-infrastructure-3d")) m.setLayoutProperty("underground-infrastructure-3d", "visibility", "none");
+        m.easeTo({ pitch: 60, duration: 600 });
+      }
+    } catch (e) {
+      console.warn("Stratum filter update error:", e);
+    }
+  }, [stratumFilter, viewMode, layerUnderground, layerBuildings]);
+
+  // ── 5. Selection highlight sync ───────────────────────────────────────────
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !m.isStyleLoaded()) return;
+
+    const id = selectedFeature?.properties?.three_d_property_id ?? "";
+    if (m.getLayer("cadastral-buildings-selected")) {
+      m.setFilter("cadastral-buildings-selected", ["==", "three_d_property_id", id]);
+    }
+    if (m.getLayer("cadastral-unit-selected")) {
+      m.setFilter("cadastral-unit-selected", ["==", "three_d_property_id", id]);
+    }
+  }, [selectedFeature]);
+
+  // ── 6. Mode Change ────────────────────────────────────────────────────────
   const handleModeChange = (mode: MapViewMode) => {
     setViewMode(mode);
-    if (mapRef.current && mode !== "cesium") {
-      if (mode === "2d") {
-        mapRef.current.easeTo({ pitch: 0, bearing: 0, duration: 800 });
-      } else if (mode === "3d_extruded") {
-        mapRef.current.easeTo({ pitch: 58, bearing: -25, duration: 800 });
+    const m = mapRef.current;
+    if (!m || mode === "cesium") return;
+
+    const setLayerVis = (id: string, vis: boolean) => {
+      try {
+        if (m.getLayer(id)) {
+          m.setLayoutProperty(id, "visibility", vis ? "visible" : "none");
+        }
+      } catch (_) {}
+    };
+
+    if (mode === "2d") {
+      m.easeTo({ pitch: 0, bearing: 0, duration: 700 });
+      setLayerVis("cadastral-buildings-3d", false);
+      setLayerVis("cadastral-buildings-dashed-outline", true);
+      setLayerVis("cadastral-buildings-flat", true);
+      setLayerVis("cadastral-units-3d", false);
+      setLayerVis("cadastral-units-outline", false);
+      setLayerVis("cadastral-building-envelope-glass", false);
+    } else if (mode === "3d_extruded") {
+      m.easeTo({ pitch: 55, bearing: -20, duration: 700 });
+      setLayerVis("cadastral-buildings-3d", true);
+      setLayerVis("cadastral-buildings-dashed-outline", false);
+      setLayerVis("cadastral-buildings-flat", false);
+      setLayerVis("cadastral-units-3d", false);
+      setLayerVis("cadastral-units-outline", false);
+      setLayerVis("cadastral-building-envelope-glass", false);
+    } else if (mode === "3d_units") {
+      m.easeTo({
+        center: PUNE_PILOT_CENTER,
+        zoom: PUNE_PILOT_ZOOM,
+        pitch: PUNE_PILOT_PITCH,
+        bearing: PUNE_PILOT_BEARING,
+        duration: 700,
+      });
+      setLayerVis("cadastral-buildings-3d", false);
+      setLayerVis("cadastral-buildings-dashed-outline", false);
+      setLayerVis("cadastral-buildings-flat", false);
+      setLayerVis("cadastral-units-3d", true);
+      setLayerVis("cadastral-units-outline", true);
+      setLayerVis("cadastral-building-envelope-glass", true);
+    }
+  };
+
+  // ── 7. Layer toggle ───────────────────────────────────────────────────────
+  const toggleBuildingLayer = (visible: boolean) => {
+    setLayerBuildings(visible);
+    const m = mapRef.current;
+    if (!m) return;
+    const targetLayers =
+      viewMode === "3d_units"
+        ? ["cadastral-units-3d", "cadastral-units-outline", "cadastral-building-envelope-glass"]
+        : ["cadastral-buildings-3d", "cadastral-buildings-flat"];
+    targetLayers.forEach((id) => {
+      try {
+        if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+      } catch (_) {}
+    });
+  };
+
+  // ── 5. Quick search (filter by name / ULPIN / 3D ID) ─────────────────────
+  const handleSearch = () => {
+    if (!searchQuery.trim() || !geoData) return;
+    const q = searchQuery.toLowerCase();
+    const hit = geoData.features?.find((f: any) => {
+      const p = f.properties;
+      return (
+        p.name?.toLowerCase().includes(q) ||
+        p.ULPIN?.toLowerCase().includes(q) ||
+        p.three_d_property_id?.toLowerCase().includes(q) ||
+        p["addr:street"]?.toLowerCase().includes(q)
+      );
+    });
+    if (hit) {
+      setSelectedFeature(hit as BuildingFeature);
+      const coords = hit.geometry?.coordinates?.[0];
+      if (coords && mapRef.current) {
+        const lngs = coords.map((c: [number, number]) => c[0]);
+        const lats = coords.map((c: [number, number]) => c[1]);
+        const cx = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+        const cy = (Math.min(...lats) + Math.max(...lats)) / 2;
+        mapRef.current.flyTo({ center: [cx, cy], zoom: 18, duration: 900 });
       }
     }
   };
 
-  const handleResetCamera = () => {
-    if (mapRef.current) {
-      mapRef.current.flyTo({
-        center: [75.805, 26.915],
-        zoom: 16.5,
-        pitch: viewMode === "3d_extruded" ? 58 : 0,
-        bearing: viewMode === "3d_extruded" ? -25 : 0,
-      });
-    }
-  };
+  const featureCount = geoData?.features?.length ?? 0;
 
-  const features = geoData?.features || [];
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="page-container">
+
+      {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="header-actions">
         <div>
-          <h2>2D / 3D Spatial Cadastral Map</h2>
+          <h2>3D Cadastral Portal: Visualize · Search · Inspect · Download</h2>
           <p className="subtitle">
-            MapLibre GL 2D/3D extruded vector layers + CesiumJS 3D viewer integration (PRD §5.10).
+            MapLibre GL 2D/3D extruded layers • Pune Pilot Ward •{" "}
+            {featureCount.toLocaleString()} buildings loaded • PRD §5.10
           </p>
         </div>
 
@@ -229,13 +803,19 @@ export const MapPage: React.FC = () => {
             className={`btn-filter ${viewMode === "2d" ? "active" : ""}`}
             onClick={() => handleModeChange("2d")}
           >
-            🗺️ 2D Map (MapLibre)
+            🗺️ 2D Flat
           </button>
           <button
             className={`btn-filter ${viewMode === "3d_extruded" ? "active" : ""}`}
             onClick={() => handleModeChange("3d_extruded")}
           >
-            🏢 3D Extrusions (WebGL)
+            🏢 3D Building Envelopes
+          </button>
+          <button
+            className={`btn-filter ${viewMode === "3d_units" ? "active" : ""}`}
+            onClick={() => handleModeChange("3d_units")}
+          >
+            🪜 3D Floor & Unit Explorer (Exploded View)
           </button>
           <button
             className={`btn-filter ${viewMode === "cesium" ? "active" : ""}`}
@@ -246,252 +826,509 @@ export const MapPage: React.FC = () => {
         </div>
       </div>
 
+      {/* ── Exploded View Secondary Toolbar (when in 3D Floor & Unit Explorer mode) ── */}
+      {viewMode === "3d_units" && (
+        <div className="exploded-controls-toolbar">
+          <div className="exploded-controls-left">
+            <span className="exploded-label">💥 Explode 3D Floors:</span>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              step="0.5"
+              value={explosionGap}
+              onChange={(e) => setExplosionGap(parseFloat(e.target.value))}
+              className="slider-range"
+            />
+            <span className="badge-explosion-gap">
+              {explosionGap === 0 ? "Stacked (0m)" : `+${explosionGap}m Vertical Lift`}
+            </span>
+            <div className="preset-buttons">
+              <button
+                className={`btn-preset ${explosionGap === 0 ? "active" : ""}`}
+                onClick={() => setExplosionGap(0)}
+              >
+                Stacked (0m)
+              </button>
+              <button
+                className={`btn-preset ${explosionGap === 3 ? "active" : ""}`}
+                onClick={() => setExplosionGap(3)}
+              >
+                Subtle (3m)
+              </button>
+              <button
+                className={`btn-preset ${explosionGap === 6 ? "active" : ""}`}
+                onClick={() => setExplosionGap(6)}
+              >
+                Exploded (6m)
+              </button>
+              <button
+                className={`btn-preset ${explosionGap === 10 ? "active" : ""}`}
+                onClick={() => setExplosionGap(10)}
+              >
+                Maximum (10m)
+              </button>
+            </div>
+          </div>
+
+          <div className="exploded-controls-right">
+            <span className="floor-filter-label">Filter Floor:</span>
+            <select
+              className="select-field"
+              value={selectedFloor}
+              onChange={(e) => setSelectedFloor(e.target.value)}
+            >
+              <option value="ALL">All Floors (Stacked/Exploded)</option>
+              <option value="-1">Basement / Parking (-3m)</option>
+              <option value="1">Floor 1 (Amber)</option>
+              <option value="2">Floor 2 (Green)</option>
+              <option value="3">Floor 3 (Cyan)</option>
+              <option value="4+">Upper Floors (4+)</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* ── Stratum Filter Bar (Volumetric, Subterranean, Surface, Above-Ground) ── */}
+      <div
+        className="stratum-filter-bar"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "8px 16px",
+          background: "rgba(15, 23, 42, 0.85)",
+          borderBottom: "1px solid var(--border)",
+          fontSize: "12px",
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <span style={{ fontWeight: 600, color: "var(--text-subtle)", display: "flex", alignItems: "center", gap: "4px" }}>
+          🌐 3D Cadastre Stratum:
+        </span>
+        <button
+          type="button"
+          className={`btn-filter ${stratumFilter === "ALL" ? "active" : ""}`}
+          onClick={() => setStratumFilter("ALL")}
+          style={{ padding: "4px 10px", fontSize: "11px" }}
+        >
+          All Strata (Volumetric)
+        </button>
+        <button
+          type="button"
+          className={`btn-filter ${stratumFilter === "SUBTERRANEAN" ? "active" : ""}`}
+          onClick={() => setStratumFilter("SUBTERRANEAN")}
+          style={{
+            padding: "4px 10px",
+            fontSize: "11px",
+            borderColor: stratumFilter === "SUBTERRANEAN" ? "#ef4444" : undefined,
+            color: stratumFilter === "SUBTERRANEAN" ? "#f87171" : undefined,
+          }}
+        >
+          🚇 Subterranean ({undergroundData?.features?.length ?? 7} Assets)
+        </button>
+        <button
+          type="button"
+          className={`btn-filter ${stratumFilter === "SURFACE" ? "active" : ""}`}
+          onClick={() => setStratumFilter("SURFACE")}
+          style={{ padding: "4px 10px", fontSize: "11px" }}
+        >
+          🗺️ Surface Land Parcels
+        </button>
+        <button
+          type="button"
+          className={`btn-filter ${stratumFilter === "ABOVE_GROUND" ? "active" : ""}`}
+          onClick={() => setStratumFilter("ABOVE_GROUND")}
+          style={{ padding: "4px 10px", fontSize: "11px" }}
+        >
+          🏢 Above-Ground Strata Units
+        </button>
+      </div>
+
+      {/* ── Map Toolbar ──────────────────────────────────────────────────── */}
       <div className="map-controls-toolbar">
         <div className="controls-left">
           <span className="badge-rule-pill">
-            {features.length} Cadastral Geometries Ingested
+            📍 Pune Ward Pilot • {featureCount.toLocaleString()} Geometries
           </span>
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={layerParcels}
-              onChange={(e) => {
-                setLayerParcels(e.target.checked);
-                if (mapRef.current) {
-                  mapRef.current.setLayoutProperty(
-                    "cadastral-parcels-fill",
-                    "visibility",
-                    e.target.checked ? "visible" : "none"
-                  );
-                }
+
+          {/* Database vs Static Data Source Indicator */}
+          {dataSource === "api" ? (
+            <span
+              className="badge-rule-pill"
+              style={{
+                background: "#059669",
+                color: "#ffffff",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
               }}
+              title="Connected to live FastAPI backend + SQLite 3D Cadastral database"
+            >
+              🟢 Live Database API
+            </span>
+          ) : (
+            <span
+              className="badge-rule-pill"
+              style={{
+                background: "#d97706",
+                color: "#ffffff",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+              title="Falling back to static GeoJSON storage"
+            >
+              🟠 Static Fallback Mode
+            </span>
+          )}
+
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={refreshFromDb}
+            disabled={isRefreshing}
+            title="Reload latest 3D unit records from database"
+            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+          >
+            {isRefreshing ? "⏳ Syncing..." : "🔄 Refresh DB"}
+          </button>
+
+          <label
+            className="btn btn-primary btn-sm"
+            style={{
+              cursor: uploading ? "not-allowed" : "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              opacity: uploading ? 0.7 : 1,
+            }}
+            title="Ingest raw GeoJSON or CSV survey data directly into backend database pipeline"
+          >
+            {uploading ? "⏳ Ingesting..." : "📥 Quick Ingest"}
+            <input
+              type="file"
+              accept=".geojson,.json,.csv"
+              onChange={handleQuickIngest}
+              disabled={uploading}
+              style={{ display: "none" }}
             />
-            Parcels (2D)
           </label>
-          <label className="checkbox-label">
+
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setShowMultiSensorModal(true)}
+            title="Open Multi-Sensor Data Ingestion Center (6 Modalities: Drone, LiDAR, GIS, CAD, GNSS/CORS, DEM/DSM)"
+            style={{
+              background: "linear-gradient(135deg, #0284c7, #0369a1)",
+              border: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontWeight: 600,
+            }}
+          >
+            📡 Multi-Sensor Ingest
+          </button>
+
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setShowAiStudioModal(true)}
+            title="Launch AI Cadastral Studio (Building Extraction, Floor Segmentation, Vertical Delineation, 3D Topology)"
+            style={{
+              background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+              border: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontWeight: 600,
+            }}
+          >
+            🧠 AI Cadastral Studio
+          </button>
+
+          <label className="checkbox-label" style={{ marginLeft: 6 }}>
             <input
               type="checkbox"
               checked={layerBuildings}
-              onChange={(e) => {
-                setLayerBuildings(e.target.checked);
-                if (mapRef.current) {
-                  mapRef.current.setLayoutProperty(
-                    "cadastral-buildings-extrusion",
-                    "visibility",
-                    e.target.checked ? "visible" : "none"
-                  );
-                }
-              }}
+              onChange={(e) => toggleBuildingLayer(e.target.checked)}
             />
-            Buildings (3D Extrusion)
+            {viewMode === "3d_units" ? "3D Units & Envelopes" : "Buildings"}
+          </label>
+
+          <label className="checkbox-label" style={{ marginLeft: 6 }}>
+            <input
+              type="checkbox"
+              checked={layerUnderground}
+              onChange={(e) => setLayerUnderground(e.target.checked)}
+            />
+            <span style={{ color: "#f87171", fontWeight: 600 }}>🚇 Subterranean Assets</span>
           </label>
         </div>
 
+        {/* Quick search bar */}
+        <div className="map-search-row">
+          <input
+            className="input-field"
+            style={{ width: 220 }}
+            placeholder="Search by name, ULPIN or 3D ID…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+          />
+          <button className="btn btn-primary btn-sm" onClick={handleSearch}>
+            🔍 Search
+          </button>
+        </div>
+
         <div className="controls-right">
+          {/* Legend */}
+          {viewMode === "3d_units" ? (
+            <div className="map-legend">
+              <div className="legend-item">
+                <span className="legend-dot" style={{ background: "#f59e0b" }} />
+                <span>Floor 1</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot" style={{ background: "#10b981" }} />
+                <span>Floor 2</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot" style={{ background: "#0ea5e9" }} />
+                <span>Floor 3</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot" style={{ background: "rgba(56, 189, 248, 0.4)", border: "1px solid #38bdf8" }} />
+                <span>Glass Envelope</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot" style={{ background: "#ef4444" }} />
+                <span>Selected Unit</span>
+              </div>
+            </div>
+          ) : (
+            <div className="map-legend">
+              <div className="legend-item">
+                <span className="legend-dot" style={{ background: "#94a3b8", border: "1px solid #64748b" }} />
+                <span>3D Building</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot" style={{ background: "#b91c1c" }} />
+                <span>Selected</span>
+              </div>
+            </div>
+          )}
           {viewMode !== "cesium" && (
-            <button className="btn btn-sm btn-secondary" onClick={handleResetCamera}>
-              🎯 Reset Camera / Jaipur Extent
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() =>
+                mapRef.current?.flyTo({
+                  center: PUNE_PILOT_CENTER,
+                  zoom: PUNE_PILOT_ZOOM,
+                  pitch: viewMode === "2d" ? 0 : PUNE_PILOT_PITCH,
+                  bearing: viewMode === "2d" ? 0 : PUNE_PILOT_BEARING,
+                })
+              }
+            >
+              🎯 Reset View
             </button>
           )}
         </div>
       </div>
 
+      {/* ── Error banner ─────────────────────────────────────────────────── */}
+      {error && (
+        <div className="alert-banner error">{error}</div>
+      )}
+
+      {/* ── Ingestion status notification banner ───────────────────────────── */}
+      {uploadStatus && (
+        <div
+          style={{
+            padding: "8px 16px",
+            background: uploadStatus.startsWith("❌")
+              ? "#fee2e2"
+              : uploadStatus.startsWith("✅")
+              ? "#dcfce7"
+              : "#e0f2fe",
+            color: uploadStatus.startsWith("❌")
+              ? "#991b1b"
+              : uploadStatus.startsWith("✅")
+              ? "#166534"
+              : "#075985",
+            borderBottom: "1px solid rgba(0,0,0,0.1)",
+            fontSize: "13px",
+            fontWeight: 500,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>{uploadStatus}</span>
+          <button
+            onClick={() => setUploadStatus(null)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "14px",
+              color: "inherit",
+              marginLeft: "12px",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ── Main split layout ─────────────────────────────────────────────── */}
       <div className="layout-split">
-        <div className="map-viewport-card" style={{ padding: 0, overflow: "hidden", minHeight: "560px" }}>
+
+        {/* ── Map container ──────────────────────────────────────────────── */}
+        <div
+          className="map-viewport-card"
+          style={{ padding: 0, overflow: "hidden", minHeight: "600px", position: "relative" }}
+        >
           {loading ? (
-            <div className="loader" style={{ padding: "80px" }}>Loading spatial cadastral features...</div>
-          ) : viewMode === "cesium" ? (
-            /* CesiumJS 3D View Screen */
-            <div className="cesium-viewer-container">
-              <div className="cesium-overlay-header">
-                <div className="cesium-badge">
-                  <span className="health-dot online" />
-                  <strong>CesiumJS 3D Globe Mode (PRD §5.10)</strong>
-                </div>
-                <div className="subtle" style={{ color: "#e2e8f0", fontSize: "12px" }}>
-                  3D Tiles & Terrain Engine • Elevation Extents: 0m to 42m
-                </div>
-              </div>
-
-              <div className="cesium-globe-viewport">
-                <div className="cesium-starfield">
-                  <div className="cesium-horizon-glow" />
-                  <div className="cesium-globe-mesh">
-                    <div className="cesium-pin jaipur-pin">
-                      <div className="pin-pulse" />
-                      <div className="pin-label">📍 Jaipur Ward Pilot (EPSG:4326)</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="cesium-telemetry-panel">
-                  <div className="telemetry-item">
-                    <span>Target ULPIN Area:</span>
-                    <strong>INMH0234567-B001</strong>
-                  </div>
-                  <div className="telemetry-item">
-                    <span>Camera Altitude:</span>
-                    <strong>450 m AMSL</strong>
-                  </div>
-                  <div className="telemetry-item">
-                    <span>Terrain Provider:</span>
-                    <strong>WGS84 Ellipsoid / GeoTIFF DEM</strong>
-                  </div>
-                  <div className="telemetry-item">
-                    <span>3D Tile LOD:</span>
-                    <strong>LOD-2 Building Envelopes</strong>
-                  </div>
-                </div>
-
-                <div className="cesium-actions">
-                  <p className="subtle" style={{ color: "#94a3b8", marginBottom: "8px" }}>
-                    CesiumJS 3D viewer is primed. Switch to <strong>3D Extrusions (WebGL)</strong> to inspect dynamic polygon heights.
-                  </p>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => handleModeChange("3d_extruded")}
-                  >
-                    View Interactive 3D Extrusions
-                  </button>
-                </div>
-              </div>
+            <div className="loader" style={{ padding: "100px" }}>
+              Loading 3D cadastral features…
             </div>
+          ) : viewMode === "cesium" ? (
+            <CesiumPlaceholder onBack={() => handleModeChange("3d_extruded")} />
           ) : webglSupported ? (
-            /* MapLibre GL WebGL Map Container */
-            <div
-              ref={mapContainerRef}
-              style={{ width: "100%", height: "560px", background: "#0f172a" }}
-            />
+            <div ref={mapContainerRef} style={{ width: "100%", height: "600px" }} />
           ) : (
-            /* SVG 2.5D Isometric Fallback */
-            <div className="spatial-canvas-container">
-              <div className="map-stats-badge">
-                {features.length} Cadastral Objects (2.5D Mode)
-              </div>
-              <svg className="spatial-svg" viewBox="0 0 800 500">
-                <defs>
-                  <linearGradient id="parcelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#2563eb" stopOpacity="0.4" />
-                    <stop offset="100%" stopColor="#1d4ed8" stopOpacity="0.7" />
-                  </linearGradient>
-                  <linearGradient id="buildingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
-                    <stop offset="100%" stopColor="#059669" stopOpacity="0.9" />
-                  </linearGradient>
-                </defs>
-                <rect width="800" height="500" fill="#f8fafc" />
-                {features.map((feat: any, idx: number) => {
-                  const x = 100 + ((idx * 160) % 600);
-                  const y = 80 + (Math.floor((idx * 160) / 600) * 140);
-                  const isSelected = selectedFeature?.properties?.three_d_property_id === feat.properties.three_d_property_id;
-                  const height = feat.properties.attributes?.height || 16;
-                  return (
-                    <g
-                      key={feat.properties.id || idx}
-                      className={`map-object-group ${isSelected ? "selected" : ""}`}
-                      onClick={() => setSelectedFeature(feat)}
-                    >
-                      <polygon
-                        points={`${x},${y} ${x + 100},${y} ${x + 120},${y - height} ${x + 20},${y - height}`}
-                        fill={feat.properties.type === "parcel" ? "url(#parcelGrad)" : "url(#buildingGrad)"}
-                        stroke={isSelected ? "#f59e0b" : "#334155"}
-                        strokeWidth={isSelected ? 3 : 1.5}
-                      />
-                      <rect
-                        x={x}
-                        y={y}
-                        width="100"
-                        height="80"
-                        fill={feat.properties.type === "parcel" ? "rgba(37,99,235,0.2)" : "rgba(16,185,129,0.3)"}
-                        stroke={isSelected ? "#f59e0b" : "#0f172a"}
-                        strokeWidth={isSelected ? 2.5 : 1}
-                        rx="4"
-                      />
-                      <text x={x + 10} y={y + 35} className="map-label">
-                        {feat.properties.three_d_property_id?.slice(-12) || `Object ${idx + 1}`}
-                      </text>
-                      <text x={x + 10} y={y + 55} className="map-sublabel">
-                        h: {height}m | {feat.properties.status}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
+            <SvgFallback features={geoData?.features ?? []} selected={selectedFeature} onSelect={setSelectedFeature} />
+          )}
+
+          {/* Floating selection badge on map */}
+          {selectedFeature && (
+            <div className="map-selection-badge">
+              📌 {selectedFeature.properties?.name ?? selectedFeature.properties?.three_d_property_id?.slice(0, 10)}
             </div>
           )}
         </div>
 
-        {/* Selected Spatial Object Drawer */}
-        {selectedFeature ? (
-          <div className="detail-drawer">
-            <div className="drawer-header">
-              <h3>Selected Spatial Object</h3>
-              <button className="btn-close" onClick={() => setSelectedFeature(null)}>✕</button>
-            </div>
-            <div className="mono-title">
-              {selectedFeature.properties?.three_d_property_id || "Cadastral Object"}
-            </div>
-
-            <div className="detail-section">
-              <h4>Spatial Attributes & Boundaries</h4>
-              <div className="attr-grid">
-                <div><strong>Type:</strong> <span className="type-tag">{selectedFeature.properties?.type}</span></div>
-                <div><strong>Status:</strong> {selectedFeature.properties?.status}</div>
-                <div>
-                  <strong>Confidence:</strong>{" "}
-                  {selectedFeature.properties?.confidence
-                    ? `${Math.round(selectedFeature.properties.confidence * 100)}%`
-                    : "85%"}
-                </div>
-                <div>
-                  <strong>Vertical Z:</strong>{" "}
-                  {selectedFeature.properties?.z_min ?? 0}m to {selectedFeature.properties?.z_max ?? "?"}m
-                </div>
-              </div>
-            </div>
-
-            {featureDetail && (
-              <div className="detail-section">
-                <h4>Cadastral Metadata & Provenance</h4>
-                <div className="attr-grid">
-                  <div><strong>Sources:</strong> {featureDetail.source_list?.join(", ") || "GeoJSON Footprint"}</div>
-                  <div><strong>Created:</strong> {new Date(featureDetail.created_at).toLocaleString()}</div>
-                </div>
-              </div>
-            )}
-
-            {selectedFeature.properties?.attributes && (
-              <div className="detail-section">
-                <h4>Semantic Attributes (JSONB)</h4>
-                <pre className="code-block">
-                  {typeof selectedFeature.properties.attributes === "string"
-                    ? selectedFeature.properties.attributes
-                    : JSON.stringify(selectedFeature.properties.attributes, null, 2)}
-                </pre>
-              </div>
-            )}
-
-            {selectedFeature.geometry && (
-              <div className="detail-section">
-                <h4>Geometry (EPSG:4326)</h4>
-                <div className="mono-subtle">
-                  Type: {selectedFeature.geometry.type}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="detail-drawer empty-drawer">
-            <div className="empty-state">
-              <span style={{ fontSize: "32px" }}>🗺️</span>
-              <h4>No Object Selected</h4>
-              <p className="subtle">
-                Click on any 2D parcel or 3D building envelope on the map to inspect its cadastral attributes, vertical Z bounds, and provenance.
-              </p>
-            </div>
-          </div>
-        )}
+        {/* ── Object Detail Drawer ──────────────────────────────────────── */}
+        <ObjectDetailDrawer
+          feature={selectedFeature}
+          onClose={() => setSelectedFeature(null)}
+          currentRole={currentRole}
+        />
       </div>
+
+      {/* ── Multi-Sensor Ingest Modal ── */}
+      <MultiSensorIngestModal
+        isOpen={showMultiSensorModal}
+        onClose={() => setShowMultiSensorModal(false)}
+        onSuccess={(msg) => {
+          setUploadStatus(msg);
+          refreshFromDb();
+        }}
+      />
+
+      {/* ── AI Cadastral Intelligence Studio Modal ── */}
+      <AiCadastralStudioModal
+        isOpen={showAiStudioModal}
+        onClose={() => setShowAiStudioModal(false)}
+        onApplyResults={() => refreshFromDb()}
+      />
     </div>
   );
 };
+
+// ── CesiumJS placeholder ───────────────────────────────────────────────────────
+function CesiumPlaceholder({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="cesium-viewer-container">
+      <div className="cesium-overlay-header">
+        <div className="cesium-badge">
+          <span className="health-dot online" />
+          <strong>CesiumJS 3D Globe Mode</strong>
+        </div>
+        <div style={{ color: "#e2e8f0", fontSize: "12px" }}>
+          3D Tiles · Terrain Engine · Elevation Extents
+        </div>
+      </div>
+      <div className="cesium-globe-viewport">
+        <div className="cesium-starfield">
+          <div className="cesium-horizon-glow" />
+          <div className="cesium-globe-mesh">
+            <div className="cesium-pin jaipur-pin">
+              <div className="pin-pulse" />
+              <div className="pin-label">📍 Pune Pilot Ward (EPSG:4326)</div>
+            </div>
+          </div>
+        </div>
+        <div className="cesium-telemetry-panel">
+          {[
+            ["Target Area", "Pune, Maharashtra"],
+            ["Camera Alt", "450 m AMSL"],
+            ["Terrain", "WGS84 / GeoTIFF DEM"],
+            ["3D Tile LOD", "LOD-2 Building Envelopes"],
+          ].map(([k, v]) => (
+            <div key={k} className="telemetry-item">
+              <span>{k}:</span>
+              <strong>{v}</strong>
+            </div>
+          ))}
+        </div>
+        <div className="cesium-actions">
+          <p style={{ color: "#94a3b8", marginBottom: "8px", fontSize: "12px" }}>
+            CesiumJS 3D viewer primed. Switch to 3D Extrusions for interactive inspection.
+          </p>
+          <button className="btn btn-primary" onClick={onBack}>
+            View Interactive 3D Extrusions
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SVG isometric fallback (no WebGL) ─────────────────────────────────────────
+function SvgFallback({
+  features,
+  selected,
+  onSelect,
+}: {
+  features: any[];
+  selected: BuildingFeature | null;
+  onSelect: (f: BuildingFeature) => void;
+}) {
+  return (
+    <div className="spatial-canvas-container">
+      <div className="map-stats-badge">{features.length} Objects (2.5D Fallback)</div>
+      <svg className="spatial-svg" viewBox="0 0 800 500">
+        <rect width="800" height="500" fill="#f8fafc" />
+        {features.slice(0, 24).map((feat: any, idx: number) => {
+          const x = 60 + ((idx * 140) % 680);
+          const y = 120 + Math.floor((idx * 140) / 680) * 150;
+          const h = Math.min((feat.properties.height ?? 9) / 3, 40);
+          const isSel = selected?.properties?.three_d_property_id === feat.properties.three_d_property_id;
+          return (
+            <g key={idx} className="map-object-group" onClick={() => onSelect(feat as BuildingFeature)}>
+              <polygon
+                points={`${x},${y} ${x + 90},${y} ${x + 110},${y - h} ${x + 20},${y - h}`}
+                fill="#fca5a5" fillOpacity={0.7}
+                stroke={isSel ? "#b91c1c" : "#111827"} strokeWidth={isSel ? 2.5 : 1}
+                strokeDasharray={isSel ? "none" : "3,2"}
+              />
+              <rect x={x} y={y} width="90" height="70"
+                fill="#fca5a5" fillOpacity={0.5}
+                stroke={isSel ? "#b91c1c" : "#111827"} strokeWidth={isSel ? 2 : 1}
+                strokeDasharray={isSel ? "none" : "3,2"} rx={3} />
+              <text x={x + 6} y={y + 30} className="map-label" fontSize="9">
+                {feat.properties.three_d_property_id?.slice(-10)}
+              </text>
+              <text x={x + 6} y={y + 45} className="map-sublabel">
+                h:{feat.properties.height ?? 9}m
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}

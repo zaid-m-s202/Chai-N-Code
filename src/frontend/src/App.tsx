@@ -56,7 +56,7 @@ export default function App() {
         <div className="gov-branding">
           <div className="emblem-box">🏛️</div>
           <div>
-            <h1>3D Cadastral Intelligence & Property Identification</h1>
+            <h1>3D Cadastral Portal: Visualize · Search · Inspect · Download</h1>
             <p className="gov-subtitle">
               National Geospatial Cadastral System • Spatial Identity (ULPIN-B-F-U) • Evidence-Backed
             </p>
@@ -144,7 +144,7 @@ export default function App() {
             onNavigateToProperty={handleNavigateToProperty}
           />
         )}
-        {activeTab === "map" && <MapPage />}
+        {activeTab === "map" && <MapPage currentRole={currentRole} />}
         {activeTab === "ingestion" && (
           <IngestionPage
             currentRole={currentRole}
