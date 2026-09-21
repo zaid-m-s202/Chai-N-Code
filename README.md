@@ -1,6 +1,6 @@
 # 3D Cadastral Intelligence & Property Identification System
 
-Production-structured MVP pilot for an evidence-backed government 3D cadastral intelligence platform.
+Production-structured MVP pilot for an evidence-backed government 3D cadastral intelligence platform .
 
 Combines cadastral/geospatial parcel footprints, tabular survey observations, building height/floor records, and deterministic topology validation into an event-sourced, versioned 3D spatial hierarchy (**parcel → building → floor → unit**).
 
