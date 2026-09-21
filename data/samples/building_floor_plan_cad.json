@@ -1,0 +1,115 @@
+{
+  "building_id": 1,
+  "building_name": "Regency Meadows Tower A",
+  "base_ulpin": "INMH01PUN001124",
+  "ground_elevation_m": 0.0,
+  "units": [
+    {
+      "floor": 1,
+      "unit": 101,
+      "name": "Flat 101 (2BHK Luxury)",
+      "carpet_area_sqm": 88.5,
+      "built_up_area_sqm": 105.0,
+      "ceiling_height_m": 3.0,
+      "rooms_count": 4,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.9048,
+              18.602
+            ],
+            [
+              73.905,
+              18.602
+            ],
+            [
+              73.905,
+              18.6018
+            ],
+            [
+              73.9048,
+              18.6018
+            ],
+            [
+              73.9048,
+              18.602
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "floor": 2,
+      "unit": 201,
+      "name": "Flat 201 (2BHK Luxury)",
+      "carpet_area_sqm": 88.5,
+      "built_up_area_sqm": 105.0,
+      "ceiling_height_m": 3.0,
+      "rooms_count": 4,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.9048,
+              18.602
+            ],
+            [
+              73.905,
+              18.602
+            ],
+            [
+              73.905,
+              18.6018
+            ],
+            [
+              73.9048,
+              18.6018
+            ],
+            [
+              73.9048,
+              18.602
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "floor": -1,
+      "unit": 1,
+      "unit_type": "parking_basement",
+      "name": "Basement B1 Reserved Slot 01",
+      "carpet_area_sqm": 12.5,
+      "ceiling_height_m": 2.8,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.9048,
+              18.602
+            ],
+            [
+              73.9049,
+              18.602
+            ],
+            [
+              73.9049,
+              18.6019
+            ],
+            [
+              73.9048,
+              18.6019
+            ],
+            [
+              73.9048,
+              18.602
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

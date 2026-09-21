@@ -1,0 +1,47 @@
+{
+  "dataset_name": "Pune City Aerial LiDAR Survey 2026",
+  "scan_system": "RIEGL VQ-1560 II-S",
+  "point_density_pts_m2": 32.5,
+  "pulse_rate_khz": 800,
+  "crs": "EPSG:4326",
+  "clusters": [
+    {
+      "id": "lidar-cluster-101",
+      "classification": "building",
+      "class_code": 6,
+      "elevation_min": 558.0,
+      "elevation_max": 588.0,
+      "height_m": 30.0,
+      "z_min": 0.0,
+      "z_max": 30.0,
+      "point_density_pts_m2": 35.2,
+      "points_count": 48200,
+      "volume_m3": 18500.0,
+      "bbox": [
+        73.8155,
+        18.6008,
+        73.8166,
+        18.6014
+      ],
+      "name": "Kalpataru Estate High-Rise Cluster"
+    },
+    {
+      "id": "lidar-cluster-102",
+      "classification": "ground",
+      "class_code": 2,
+      "elevation_min": 557.5,
+      "elevation_max": 558.2,
+      "z_min": 0.0,
+      "z_max": 0.7,
+      "point_density_pts_m2": 28.0,
+      "points_count": 82000,
+      "bbox": [
+        73.815,
+        18.6,
+        73.817,
+        18.602
+      ],
+      "name": "Bare Earth Cadastral Ground Plane"
+    }
+  ]
+}

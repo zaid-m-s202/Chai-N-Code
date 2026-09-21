@@ -1,0 +1,20 @@
+{
+  "tiles": [
+    {
+      "id": "tile-dem-dsm-01",
+      "name": "Sadashiv Terrain Elevation Cell",
+      "dem_elevation_m": 558.0,
+      "dsm_elevation_m": 573.0,
+      "ndsm_height_m": 15.0,
+      "slope_deg": 0.8,
+      "vertical_datum": "EGM2008",
+      "resolution_m": 0.5,
+      "bbox": [
+        73.8452,
+        18.5115,
+        73.8458,
+        18.5121
+      ]
+    }
+  ]
+}

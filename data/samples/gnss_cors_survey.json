@@ -1,0 +1,45 @@
+{
+  "survey_id": "CORS-SVY-2026-088",
+  "survey_name": "Sadashiv Cadastral CORS High-Precision Survey",
+  "cors_station_id": "CORS-IN-MH-PUN01",
+  "state": "MH",
+  "district": "PUN",
+  "fix_type": "RTK_FIXED",
+  "horizontal_accuracy_cm": 1.2,
+  "vertical_accuracy_cm": 1.8,
+  "pdop": 1.1,
+  "num_satellites": 28,
+  "surveyor_id": "SURVEYOR-GOV-MH449",
+  "boundary_points": [
+    {
+      "id": "P1",
+      "lon": 73.8451,
+      "lat": 18.5113,
+      "elevation_m": 558.12
+    },
+    {
+      "id": "P2",
+      "lon": 73.84575,
+      "lat": 18.51135,
+      "elevation_m": 558.15
+    },
+    {
+      "id": "P3",
+      "lon": 73.8457,
+      "lat": 18.51198,
+      "elevation_m": 558.18
+    },
+    {
+      "id": "P4",
+      "lon": 73.84505,
+      "lat": 18.51194,
+      "elevation_m": 558.14
+    },
+    {
+      "id": "P1",
+      "lon": 73.8451,
+      "lat": 18.5113,
+      "elevation_m": 558.12
+    }
+  ]
+}

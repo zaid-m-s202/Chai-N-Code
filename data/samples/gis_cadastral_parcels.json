@@ -1,0 +1,55 @@
+{
+  "type": "FeatureCollection",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "GIS-MH-PUN-001",
+        "khasra_no": "112/4",
+        "survey_no": "271",
+        "village": "Sadashiv Peth",
+        "tehsil": "Haveli",
+        "district": "Pune",
+        "state": "MH",
+        "land_use": "Residential Commercial Mixed",
+        "area": 1240.5,
+        "units": "sq_meters",
+        "ulpin": "INMH01PUN001124-SURF",
+        "verified": true
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.845,
+              18.512
+            ],
+            [
+              73.8458,
+              18.5121
+            ],
+            [
+              73.8457,
+              18.5114
+            ],
+            [
+              73.8451,
+              18.5113
+            ],
+            [
+              73.845,
+              18.512
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

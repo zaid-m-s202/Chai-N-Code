@@ -1,0 +1,60 @@
+{
+  "flight_id": "UAV-SURVEY-2026-09A",
+  "sensor": "Zenmuse P1 35mm Full-Frame",
+  "flight_altitude_agl_m": 85.0,
+  "gsd_cm_per_pixel": 1.25,
+  "overlap_forward_pct": 80,
+  "overlap_side_pct": 75,
+  "crs": "EPSG:4326",
+  "ground_control_points": [
+    {
+      "id": "GCP-01",
+      "lon": 73.8453,
+      "lat": 18.5119,
+      "z_m": 558.2,
+      "residual_cm": 0.8
+    },
+    {
+      "id": "GCP-02",
+      "lon": 73.8457,
+      "lat": 18.5116,
+      "z_m": 558.1,
+      "residual_cm": 0.6
+    }
+  ],
+  "coverage": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          73.845,
+          18.5122
+        ],
+        [
+          73.8462,
+          18.5122
+        ],
+        [
+          73.8462,
+          18.5113
+        ],
+        [
+          73.845,
+          18.5113
+        ],
+        [
+          73.845,
+          18.5122
+        ]
+      ]
+    ]
+  },
+  "extracted_features": [
+    {
+      "id": "bldg-drone-01",
+      "name": "Sadashiv Educational Complex Block A",
+      "height_m": 15.2,
+      "levels": 5
+    }
+  ]
+}
