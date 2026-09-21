@@ -30,6 +30,12 @@ RIGHTS_TYPES = (
     "strata_title",
     "occupancy_right",
     "customary_right",
+    # 3D Strata and Subterranean Ownership Rights
+    "air_rights",
+    "surface_freehold",
+    "subterranean_easement",
+    "common_property_share",
+    "utility_corridor_right",
     "other",
 )
 

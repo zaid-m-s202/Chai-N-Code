@@ -67,6 +67,25 @@ OPENAPI_TAGS = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Auto-create tables on startup (SQLite dev mode; use Alembic for production)
+    from app.database import Base, engine
+    Base.metadata.create_all(bind=engine)
+
+    # In SQLite dev mode, ensure new columns are dynamically added if table was pre-existing
+    try:
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            result = conn.execute(text("PRAGMA table_info(property_objects)"))
+            existing_cols = {row[1] for row in result.fetchall()}
+            if "stratum" not in existing_cols:
+                conn.execute(text("ALTER TABLE property_objects ADD COLUMN stratum VARCHAR(20) DEFAULT 'SURFACE'"))
+                conn.commit()
+            if "volume_m3" not in existing_cols:
+                conn.execute(text("ALTER TABLE property_objects ADD COLUMN volume_m3 FLOAT DEFAULT 0.0"))
+                conn.commit()
+    except Exception as e:
+        print(f"Warning: SQLite auto-migration check: {e}")
+
     yield
 
 

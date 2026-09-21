@@ -11,7 +11,7 @@ from shapely.geometry.base import BaseGeometry
 class CanonicalRecord:
     """Standardized property observation extracted by an adapter."""
     ulpin: str
-    object_type: str  # parcel | building | floor | unit
+    object_type: str  # parcel | building | floor | unit | parking_basement | underground_utility
     geometry: Optional[BaseGeometry] = None
     geojson_geometry: Optional[dict[str, Any]] = None
     building_seq: int = 1
@@ -26,6 +26,23 @@ class CanonicalRecord:
     observed_at: Optional[datetime] = None
     source_id: Optional[str] = None
     original_crs: str = "EPSG:4326"
+    status: str = "DERIVED"
+
+    @property
+    def type(self) -> str:
+        return self.object_type
+
+    @type.setter
+    def type(self, value: str):
+        self.object_type = value
+
+    @property
+    def confidence(self) -> float:
+        return self.source_confidence
+
+    @confidence.setter
+    def confidence(self, value: float):
+        self.source_confidence = value
 
 
 class IngestionAdapter(ABC):

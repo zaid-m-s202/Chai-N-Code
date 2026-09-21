@@ -36,6 +36,38 @@ class FootprintExtractionRequest(BaseModel):
     scale_factor: Optional[float] = Field(0.75, description="Setback scale ratio within parcel")
     tolerance: Optional[float] = Field(0.00002, description="Douglas-Peucker simplification tolerance")
     model_name: Optional[str] = Field("CadastralMaskRCNN-V2", description="AI extraction model tag")
+    drone_imagery: Optional[dict[str, Any]] = Field(None, description="Drone orthomosaic coverage or metadata")
+    lidar_cluster: Optional[dict[str, Any]] = Field(None, description="LiDAR 3D point cloud cluster or bounds")
+
+
+class FloorSegmentationRequest(BaseModel):
+    footprint: Optional[dict[str, Any]] = Field(None, description="Building footprint GeoJSON geometry")
+    units_count: Optional[int] = Field(4, description="Target units per floor")
+    floor_number: Optional[int] = Field(1, description="Floor index")
+    building_id: Optional[int] = Field(1, description="Building numerical ID")
+    base_ulpin: Optional[str] = Field("INMH01PARCEL0001", description="Parent parcel base ULPIN")
+    ceiling_height_m: Optional[float] = Field(3.0, description="Floor-to-ceiling height in meters")
+    ground_elevation_m: Optional[float] = Field(0.0, description="Base ground elevation in meters")
+    corridor_ratio: Optional[float] = Field(0.12, description="Common circulation hallway ratio")
+
+
+class VerticalParcelDelineationRequest(BaseModel):
+    footprint: Optional[dict[str, Any]] = Field(None, description="Base parcel GeoJSON geometry")
+    base_ulpin: Optional[str] = Field(None, description="Base 14-character parcel ULPIN")
+    state: Optional[str] = Field("MH", description="2-letter state code")
+    district: Optional[str] = Field("MUM", description="3-letter district code")
+    floor_count: Optional[int] = Field(5, description="Number of above-ground floors")
+    units_per_floor: Optional[int] = Field(4, description="Number of units per floor")
+    basement_levels: Optional[int] = Field(1, description="Number of basement levels")
+    ceiling_height_m: Optional[float] = Field(3.0, description="Floor-to-ceiling height in meters")
+    ground_elevation_m: Optional[float] = Field(12.0, description="Ground elevation datum (m)")
+    include_underground_utilities: Optional[bool] = Field(True, description="Include metro tunnel & utility corridors")
+
+
+class TopologyValidationRequest(BaseModel):
+    parcels: Optional[list[dict[str, Any]]] = Field(None, description="List of 3D property objects/units with bounds")
+    features: Optional[list[dict[str, Any]]] = Field(None, description="Alternative key: GeoJSON feature array")
+    parent_footprint: Optional[dict[str, Any]] = Field(None, description="Parent cadastral parcel boundary polygon")
 
 
 class AnalysisResultResponse(BaseModel):

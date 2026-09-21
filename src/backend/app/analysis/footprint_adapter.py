@@ -9,7 +9,7 @@ Strictly subject to AI status gating: never VERIFIED.
 
 from typing import Any, Optional
 import math
-from shapely.geometry import shape, mapping, Polygon, box
+from shapely.geometry import shape, mapping, Polygon, box, Point
 from shapely.ops import orient
 
 from app.analysis.base import BaseAnalysisAdapter, AnalysisResult
@@ -108,10 +108,36 @@ class PretrainedFootprintAdapter(BaseAnalysisAdapter):
             bounds = input_data.get("bounds", [0.0, 0.0, 1.0, 1.0])
             poly = self._vectorize_grid(grid, bounds)
 
+        # Case 5: Drone imagery orthomosaic / coverage polygon
+        elif "drone_imagery" in input_data:
+            drone_data = input_data["drone_imagery"]
+            if "geometry" in drone_data:
+                poly = shape(drone_data["geometry"])
+            elif "coverage" in drone_data:
+                poly = shape(drone_data["coverage"])
+            elif "bbox" in drone_data:
+                bx = drone_data["bbox"]
+                poly = box(bx[0], bx[1], bx[2], bx[3])
+            source_model = "UAV-Orthomosaic-YOLOv8x"
+
+        # Case 6: LiDAR 3D point cloud cluster
+        elif "lidar_cluster" in input_data or "point_cloud" in input_data:
+            pc_data = input_data.get("lidar_cluster") or input_data.get("point_cloud")
+            if "points" in pc_data and isinstance(pc_data["points"], list) and len(pc_data["points"]) >= 3:
+                from shapely.geometry import MultiPoint
+                pts = [Point(p[0], p[1]) if isinstance(p, (list, tuple)) else Point(p.get("x", 0), p.get("y", 0)) for p in pc_data["points"]]
+                poly = MultiPoint(pts).convex_hull
+            elif "bbox" in pc_data or "bounds" in pc_data:
+                bx = pc_data.get("bbox") or pc_data.get("bounds")
+                poly = box(bx[0], bx[1], bx[2], bx[3])
+            elif "geometry" in pc_data:
+                poly = shape(pc_data["geometry"])
+            source_model = "PointNet++-CadastralLidar-V3"
+
         else:
             raise ValueError(
                 "Input dictionary must specify one of: 'parcel_geometry', 'bbox', "
-                "'coordinates', or 'mask_grid'."
+                "'coordinates', 'mask_grid', 'drone_imagery', or 'lidar_cluster'."
             )
 
         if poly is None or poly.is_empty:

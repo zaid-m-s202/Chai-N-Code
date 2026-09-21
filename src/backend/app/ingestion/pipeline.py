@@ -22,6 +22,12 @@ from app.models.ingestion_job import IngestionJob
 from app.ingestion.adapters.base import IngestionAdapter, CanonicalRecord
 from app.ingestion.adapters.geojson_adapter import GeoJSONAdapter
 from app.ingestion.adapters.csv_adapter import CSVAdapter
+from app.ingestion.adapters.drone_adapter import DroneImageryAdapter
+from app.ingestion.adapters.lidar_adapter import LidarPointCloudAdapter
+from app.ingestion.adapters.gis_parcel_adapter import GisParcelAdapter
+from app.ingestion.adapters.floor_plan_adapter import FloorPlanAdapter
+from app.ingestion.adapters.gnss_cors_adapter import GnssCorsAdapter
+from app.ingestion.adapters.dem_dsm_adapter import DemDsmAdapter
 from app.services.id_generator import make_3d_property_id, parse_3d_property_id
 from app.services.fusion import Observation as FusionObservation, fuse_attribute
 from app.services.floor_height_heuristic import (
@@ -37,7 +43,21 @@ def get_adapter_for_format(file_format: str) -> IngestionAdapter:
         return GeoJSONAdapter()
     elif fmt == "csv":
         return CSVAdapter()
-    raise ValueError(f"Unsupported format: {file_format}. Supported formats in MVP: geojson, csv")
+    elif fmt in ("drone", "drone_imagery", "orthomosaic", "ortho"):
+        return DroneImageryAdapter()
+    elif fmt in ("lidar", "point_cloud", "las", "laz"):
+        return LidarPointCloudAdapter()
+    elif fmt in ("gis", "gis_parcel", "shapefile", "gpkg", "wfs"):
+        return GisParcelAdapter()
+    elif fmt in ("floor_plan", "cad", "dxf", "bim"):
+        return FloorPlanAdapter()
+    elif fmt in ("gnss", "cors", "rtk", "gnss_cors"):
+        return GnssCorsAdapter()
+    elif fmt in ("dem", "dsm", "elevation", "dem_dsm", "geotiff"):
+        return DemDsmAdapter()
+    raise ValueError(
+        f"Unsupported format: {file_format}. Supported formats: geojson, csv, drone, lidar, gis, floor_plan, gnss, dem"
+    )
 
 
 def process_ingestion(
@@ -69,6 +89,7 @@ def process_ingestion(
         )
 
         created_count = 0
+        created_props: list[PropertyObject] = []
 
         for rec in records:
             # Generate immutable 3D Property ID: {ULPIN}-B{seq}-F{seq}-U{seq}
@@ -162,6 +183,18 @@ def process_ingestion(
 
                 # New property object: starts INFERRED/DERIVED per PRD rules
                 initial_status = "DERIVED" if file_format.lower() in ("geojson", "shapefile") else "INFERRED"
+                # Derive stratum and volumetric parameters
+                detected_stratum = rec.attributes.get("stratum")
+                if not detected_stratum:
+                    if z_max is not None and z_max < 0:
+                        detected_stratum = "SUBTERRANEAN"
+                    elif z_min is not None and z_min > 0:
+                        detected_stratum = "ABOVE_GROUND"
+                    else:
+                        detected_stratum = "SURFACE"
+
+                volume_m3 = rec.attributes.get("volume_m3")
+
                 prop = PropertyObject(
                     three_d_property_id=three_d_id,
                     type=rec.object_type,
@@ -169,6 +202,8 @@ def process_ingestion(
                     geometry=geom_elem,
                     z_min=z_min,
                     z_max=z_max,
+                    stratum=detected_stratum,
+                    volume_m3=volume_m3,
                     attributes={
                         **rec.attributes,
                         "geojson_geometry": rec.geojson_geometry,
@@ -205,6 +240,7 @@ def process_ingestion(
                 )
                 db.add(change_event)
                 created_count += 1
+                created_props.append(prop)
             else:
                 # Existing property: append evidence and re-fuse with past observations
                 evidence.property_object_id = prop.id
@@ -302,12 +338,11 @@ def process_ingestion(
                 )
                 db.add(obs_footprint)
 
-        # Post-ingestion hierarchy linking pass for batch
-        all_unlinked = db.query(PropertyObject).filter(
-            PropertyObject.superseded_by.is_(None),
-            PropertyObject.parent_id.is_(None),
-            PropertyObject.type.in_(("building", "floor", "unit")),
-        ).all()
+        # Post-ingestion hierarchy linking pass for newly created records in this batch
+        all_unlinked = [
+            p for p in created_props
+            if p.parent_id is None and p.type in ("building", "floor", "unit")
+        ]
         for p in all_unlinked:
             try:
                 parsed = parse_3d_property_id(p.three_d_property_id)

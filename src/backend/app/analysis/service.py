@@ -14,6 +14,9 @@ from app.analysis.base import BaseAnalysisAdapter, AnalysisResult, validate_ai_s
 from app.analysis.elevation_adapter import DsmDemHeightAdapter
 from app.analysis.floor_estimator_adapter import FloorEstimatorAdapter
 from app.analysis.footprint_adapter import PretrainedFootprintAdapter
+from app.analysis.floor_segmentation_adapter import FloorSegmentationAdapter
+from app.analysis.vertical_parcel_delineator import VerticalParcelDelineator
+from app.analysis.intelligent_topology_validator import IntelligentTopologyValidator
 from app.models.property_object import PropertyObject
 from app.models.source_observation import SourceObservation
 from app.models.evidence import Evidence
@@ -29,6 +32,9 @@ class AnalysisService:
         self.register_adapter(DsmDemHeightAdapter())
         self.register_adapter(FloorEstimatorAdapter())
         self.register_adapter(PretrainedFootprintAdapter())
+        self.register_adapter(FloorSegmentationAdapter())
+        self.register_adapter(VerticalParcelDelineator())
+        self.register_adapter(IntelligentTopologyValidator())
 
     def register_adapter(self, adapter: BaseAnalysisAdapter) -> None:
         """Register a new analysis adapter."""

@@ -20,6 +20,9 @@ from app.schemas.analysis import (
     DsmDemHeightRequest,
     FloorEstimatorRequest,
     FootprintExtractionRequest,
+    FloorSegmentationRequest,
+    VerticalParcelDelineationRequest,
+    TopologyValidationRequest,
     AnalysisResultResponse,
     PropertyAnalysisRequest,
     PropertyAnalysisResponse,
@@ -89,6 +92,76 @@ def execute_footprint_extraction(payload: FootprintExtractionRequest):
     try:
         input_data = payload.model_dump(exclude_none=True)
         result = analysis_service.run_adapter("pretrained_footprint_extractor", input_data)
+        return AnalysisResultResponse(
+            adapter_name=result.adapter_name,
+            adapter_version=result.adapter_version,
+            status=result.status,
+            confidence=result.confidence,
+            data=result.data,
+            evidence=result.evidence,
+            warnings=result.warnings,
+            executed_at=result.executed_at,
+        )
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post("/analysis/segment-floors", response_model=AnalysisResultResponse)
+def execute_floor_segmentation(payload: FloorSegmentationRequest):
+    """Decomposes building floor footprints into strata apartment units and common areas.
+    
+    Status gating: Returns status DERIVED, never VERIFIED.
+    """
+    try:
+        input_data = payload.model_dump(exclude_none=True)
+        result = analysis_service.run_adapter("floor_plan_unit_segmenter", input_data)
+        return AnalysisResultResponse(
+            adapter_name=result.adapter_name,
+            adapter_version=result.adapter_version,
+            status=result.status,
+            confidence=result.confidence,
+            data=result.data,
+            evidence=result.evidence,
+            warnings=result.warnings,
+            executed_at=result.executed_at,
+        )
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post("/analysis/delineate-vertical-parcels", response_model=AnalysisResultResponse)
+def execute_vertical_delineation(payload: VerticalParcelDelineationRequest):
+    """Synthesizes complete multi-stratum vertical cadastral stack (surface, subterranean, above-ground).
+    
+    Status gating: Returns status DERIVED, never VERIFIED.
+    """
+    try:
+        input_data = payload.model_dump(exclude_none=True)
+        result = analysis_service.run_adapter("vertical_parcel_delineator", input_data)
+        return AnalysisResultResponse(
+            adapter_name=result.adapter_name,
+            adapter_version=result.adapter_version,
+            status=result.status,
+            confidence=result.confidence,
+            data=result.data,
+            evidence=result.evidence,
+            warnings=result.warnings,
+            executed_at=result.executed_at,
+        )
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post("/analysis/validate-3d-topology", response_model=AnalysisResultResponse)
+def execute_topology_validation(payload: TopologyValidationRequest):
+    """Validates 3D volumetric cadastre topology (VR-3D-01 through VR-3D-06).
+    
+    Checks volumetric collisions, vertical clearance, parent containment, and stratum alignment.
+    Status gating: Returns status DERIVED, never VERIFIED.
+    """
+    try:
+        input_data = payload.model_dump(exclude_none=True)
+        result = analysis_service.run_adapter("intelligent_topology_validator", input_data)
         return AnalysisResultResponse(
             adapter_name=result.adapter_name,
             adapter_version=result.adapter_version,

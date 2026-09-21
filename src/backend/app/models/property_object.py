@@ -17,8 +17,13 @@ from app.database import Base
 
 
 # ----- enumerations kept as plain strings for SQLite test compat -----
-PROPERTY_TYPES = ("parcel", "building", "floor", "unit")
+PROPERTY_TYPES = (
+    "parcel", "building", "floor", "unit",
+    # Underground / subterranean infrastructure types
+    "underground_utility", "subsurface_parcel", "tunnel", "parking_basement",
+)
 PROPERTY_STATUSES = ("SYNTHETIC", "INFERRED", "DERIVED", "PROVISIONAL", "VERIFIED")
+STRATUM_TYPES = ("SURFACE", "ABOVE_GROUND", "SUBTERRANEAN")
 
 
 class PropertyObject(Base):
@@ -38,6 +43,12 @@ class PropertyObject(Base):
 
     z_min = Column(Float, nullable=True)
     z_max = Column(Float, nullable=True)
+
+    # Stratum classification (SURFACE, ABOVE_GROUND, SUBTERRANEAN)
+    stratum = Column(String(20), nullable=True, default="SURFACE")
+
+    # 3D volumetric extent in cubic meters
+    volume_m3 = Column(Float, nullable=True)
 
     # Flexible attribute bag (PRD §7)
     attributes = Column(JSON, nullable=True, default=dict)
