@@ -9,24 +9,46 @@ import "./styles.css";
 
 type Tab = "properties" | "queue" | "map" | "ingestion" | "conflicts";
 
+function getTabFromPath(): Tab {
+  const path = (window.location.pathname || "").toLowerCase().replace(/^\/+/, "").replace(/\/+$/, "");
+  const hash = (window.location.hash || "").toLowerCase().replace(/^#\/?/, "");
+  const target = hash || path;
+
+  if (target === "map" || target === "3d" || target === "cadastre") return "map";
+  if (target === "queue" || target === "verification" || target === "validation") return "queue";
+  if (target === "ingestion" || target === "upload" || target === "import") return "ingestion";
+  if (target === "conflicts" || target === "topology") return "conflicts";
+  return "properties";
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("properties");
+  const [activeTab, setActiveTab] = useState<Tab>(getTabFromPath);
   const [currentRole, setCurrentRole] = useState<string>("VERIFYING_OFFICER");
   const [authToken, setAuthToken] = useState<string>("");
   const [navSelectedPropertyId, setNavSelectedPropertyId] = useState<string | null>(null);
   const [apiHealth, setApiHealth] = useState<"checking" | "connected" | "disconnected">("checking");
 
+  const switchTab = (tab: Tab) => {
+    setActiveTab(tab);
+    const newPath = tab === "properties" ? "/" : `/${tab}`;
+    if (window.location.pathname !== newPath) {
+      window.history.pushState(null, "", newPath);
+    }
+  };
+
+  useEffect(() => {
+    const onPopState = () => {
+      setActiveTab(getTabFromPath());
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   // Check health and obtain initial auth token for Verifying Officer
   useEffect(() => {
-    fetch("http://localhost:8000/health")
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    api.checkHealth()
       .then(() => setApiHealth("connected"))
-      .catch(() => {
-        fetch("/health")
-          .then((r) => (r.ok ? r.json() : Promise.reject()))
-          .then(() => setApiHealth("connected"))
-          .catch(() => setApiHealth("disconnected"));
-      });
+      .catch(() => setApiHealth("disconnected"));
 
     // Obtain token for initial role
     api.getQuickToken(currentRole)
@@ -47,7 +69,7 @@ export default function App() {
 
   const handleNavigateToProperty = (propertyId: string) => {
     setNavSelectedPropertyId(propertyId);
-    setActiveTab("properties");
+    switchTab("properties");
   };
 
   return (
@@ -98,32 +120,32 @@ export default function App() {
           className={`nav-item ${activeTab === "properties" ? "active" : ""}`}
           onClick={() => {
             setNavSelectedPropertyId(null);
-            setActiveTab("properties");
+            switchTab("properties");
           }}
         >
           📋 Properties Registry
         </button>
         <button
           className={`nav-item ${activeTab === "queue" ? "active" : ""}`}
-          onClick={() => setActiveTab("queue")}
+          onClick={() => switchTab("queue")}
         >
           🛡️ Officer Verification Queue
         </button>
         <button
           className={`nav-item ${activeTab === "map" ? "active" : ""}`}
-          onClick={() => setActiveTab("map")}
+          onClick={() => switchTab("map")}
         >
           🗺️ 2D/3D Spatial Map
         </button>
         <button
           className={`nav-item ${activeTab === "ingestion" ? "active" : ""}`}
-          onClick={() => setActiveTab("ingestion")}
+          onClick={() => switchTab("ingestion")}
         >
           📥 Ingestion & Provenance
         </button>
         <button
           className={`nav-item ${activeTab === "conflicts" ? "active" : ""}`}
-          onClick={() => setActiveTab("conflicts")}
+          onClick={() => switchTab("conflicts")}
         >
           ⚠️ Topology Conflicts
         </button>

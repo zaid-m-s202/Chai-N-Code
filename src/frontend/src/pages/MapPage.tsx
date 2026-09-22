@@ -4,6 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { ObjectDetailDrawer, BuildingFeature } from "../components/ObjectDetailDrawer";
 import { MultiSensorIngestModal } from "../components/MultiSensorIngestModal";
 import { AiCadastralStudioModal } from "../components/AiCadastralStudioModal";
+import { API_BASE } from "../api/client";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface MapPageProps {
@@ -56,7 +57,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
 
     // A. Try live backend API for 3D units
     try {
-      const res = await fetch("/api/v1/map/units?limit=50000");
+      const res = await fetch(`${API_BASE}/map/units?limit=50000`);
       if (res.ok) {
         const json = await res.json();
         if (json && json.features && json.features.length > 0) {
@@ -95,7 +96,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
     // D. Load underground infrastructure (API first, static fallback)
     let ugData: any = null;
     try {
-      const res = await fetch("/api/v1/map/underground?limit=5000");
+      const res = await fetch(`${API_BASE}/map/underground?limit=5000`);
       if (res.ok) {
         const json = await res.json();
         if (json && json.features && json.features.length > 0) {
@@ -140,7 +141,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
     setIsRefreshing(true);
     setUploadStatus("Querying fresh 3D property records & subterranean assets from database...");
     try {
-      const res = await fetch("/api/v1/map/units?limit=50000");
+      const res = await fetch(`${API_BASE}/map/units?limit=50000`);
       if (res.ok) {
         const json = await res.json();
         if (json && json.features && json.features.length > 0) {
@@ -150,7 +151,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
       }
 
       // Also refresh underground infrastructure
-      const ugRes = await fetch("/api/v1/map/underground?limit=5000").catch(() => null);
+      const ugRes = await fetch(`${API_BASE}/map/underground?limit=5000`).catch(() => null);
       if (ugRes && ugRes.ok) {
         const ugJson = await ugRes.json();
         if (ugJson && ugJson.features) {
@@ -180,7 +181,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
     formData.append("source_system", "field_survey_upload");
 
     try {
-      const res = await fetch("/api/v1/ingestion/jobs?async_exec=false", {
+      const res = await fetch(`${API_BASE}/ingestion/jobs?async_exec=false`, {
         method: "POST",
         body: formData,
       });

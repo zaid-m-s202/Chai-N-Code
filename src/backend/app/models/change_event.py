@@ -46,8 +46,9 @@ class ChangeEvent(Base):
     old_state = Column(JSON, nullable=True)
     new_state = Column(JSON, nullable=True)
 
-    actor_id = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    evidence_id = Column(Uuid(as_uuid=True), ForeignKey("evidence.id"), nullable=True)
+    actor_id = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    evidence_id = Column(Uuid(as_uuid=True), ForeignKey("evidence.id"), nullable=True, index=True)
+
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 

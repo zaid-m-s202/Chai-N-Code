@@ -30,8 +30,9 @@ class Evidence(Base):
     original_format = Column(String(32), nullable=True)
     source_system = Column(String(128), nullable=True)      # e.g. "municipal_survey_2024"
 
-    operator_id = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    ingestion_job_id = Column(Uuid(as_uuid=True), ForeignKey("ingestion_jobs.id"), nullable=True)
+    operator_id = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    ingestion_job_id = Column(Uuid(as_uuid=True), ForeignKey("ingestion_jobs.id"), nullable=True, index=True)
+
 
     captured_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

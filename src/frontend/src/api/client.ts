@@ -181,9 +181,30 @@ export interface PropertyAnalysisResponse {
   }[];
 }
 
-const API_BASE = "http://localhost:8000/api/v1";
+const rawBackendUrl = (import.meta.env?.VITE_API_URL || "http://localhost:8000").trim().replace(/\/+$/, "");
+export const BACKEND_ROOT = rawBackendUrl.endsWith("/api/v1")
+  ? rawBackendUrl.slice(0, -"/api/v1".length)
+  : rawBackendUrl;
+export const API_BASE = `${BACKEND_ROOT}/api/v1`;
 
 export const api = {
+  async checkHealth(): Promise<{ status: string }> {
+    const res = await fetch(`${BACKEND_ROOT}/health`);
+    if (!res.ok) throw new Error(`Health check returned HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async getMapUnits(limit: number = 50000): Promise<any> {
+    const res = await fetch(`${API_BASE}/map/units?limit=${limit}`);
+    if (!res.ok) throw new Error(`Failed to fetch 3D units: HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async getMapUnderground(limit: number = 5000): Promise<any> {
+    const res = await fetch(`${API_BASE}/map/underground?limit=${limit}`);
+    if (!res.ok) throw new Error(`Failed to fetch underground infrastructure: HTTP ${res.status}`);
+    return res.json();
+  },
   async listProperties(status?: string, type?: string): Promise<PropertySummary[]> {
     const params = new URLSearchParams();
     if (status) params.append("status", status);

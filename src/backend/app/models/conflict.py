@@ -29,7 +29,8 @@ class Conflict(Base):
     status = Column(String(16), nullable=False, default="OPEN")  # OPEN | RESOLVED | WAIVED
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     resolved_at = Column(DateTime(timezone=True), nullable=True)
-    resolved_by = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    resolved_by = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+
 
     def __repr__(self) -> str:
         return f"<Conflict {self.rule_code} [{self.status}]>"

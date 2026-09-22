@@ -15,10 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app.api.routes import router
+from app.config import settings
 from app.database import get_db
 from app.middleware import SecurityHeadersMiddleware, StructuredLoggingMiddleware
 from app.metrics import metrics_collector
 import app.models  # Ensure all models are registered with Base.metadata
+
 
 
 OPENAPI_TAGS = [
@@ -67,26 +69,14 @@ OPENAPI_TAGS = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Auto-create tables on startup (SQLite dev mode; use Alembic for production)
+    # In SQLite local dev/testing without Alembic, auto-create tables;
+    # in PostgreSQL production (Supabase), Alembic is strictly authoritative.
     from app.database import Base, engine
-    Base.metadata.create_all(bind=engine)
-
-    # In SQLite dev mode, ensure new columns are dynamically added if table was pre-existing
-    try:
-        with engine.connect() as conn:
-            from sqlalchemy import text
-            result = conn.execute(text("PRAGMA table_info(property_objects)"))
-            existing_cols = {row[1] for row in result.fetchall()}
-            if "stratum" not in existing_cols:
-                conn.execute(text("ALTER TABLE property_objects ADD COLUMN stratum VARCHAR(20) DEFAULT 'SURFACE'"))
-                conn.commit()
-            if "volume_m3" not in existing_cols:
-                conn.execute(text("ALTER TABLE property_objects ADD COLUMN volume_m3 FLOAT DEFAULT 0.0"))
-                conn.commit()
-    except Exception as e:
-        print(f"Warning: SQLite auto-migration check: {e}")
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
 
     yield
+
 
 
 app = FastAPI(
@@ -121,15 +111,24 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 2. Structured JSON Access Logging Middleware
 app.add_middleware(StructuredLoggingMiddleware)
 
-# 3. CORS Middleware
+# 3. Dynamic CORS Middleware (Local dev + Vercel production)
+cors_origins = [
+    origin.strip()
+    for origin in settings.CORS_ORIGINS.split(",")
+    if origin.strip()
+]
+use_wildcard = "*" in cors_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[] if use_wildcard else cors_origins,
+    allow_origin_regex=r".*" if use_wildcard else r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Request-ID", "X-Content-Type-Options", "X-Frame-Options"],
 )
+
 
 # 4. Master API v1 Router
 app.include_router(router, prefix="/api/v1")

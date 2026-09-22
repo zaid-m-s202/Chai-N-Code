@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { API_BASE } from "../api/client";
 
 interface Props {
   isOpen: boolean;
@@ -99,7 +100,7 @@ export const MultiSensorIngestModal: React.FC<Props> = ({ isOpen, onClose, onSuc
         activeModality.id === "gnss" ? "gnss_cors_survey" : "dem_dsm_elevation_grid"}.json`;
 
       // Try reading sample content
-      const res = await fetch(`/api/v1/samples/${filename}`).catch(() => null);
+      const res = await fetch(`${API_BASE}/samples/${filename}`).catch(() => null);
       if (res && res.ok) {
         const text = await res.text();
         setJsonText(text);
@@ -218,7 +219,7 @@ export const MultiSensorIngestModal: React.FC<Props> = ({ isOpen, onClose, onSuc
       formData.append("file", contentBytes, uploadFilename);
       formData.append("source_system", `multi_sensor_${selectedModality}`);
 
-      const res = await fetch(`/api/v1/ingestion/jobs?async_exec=false`, {
+      const res = await fetch(`${API_BASE}/ingestion/jobs?async_exec=false`, {
         method: "POST",
         body: formData,
       });

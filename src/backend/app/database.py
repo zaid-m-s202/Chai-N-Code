@@ -36,9 +36,16 @@ engine_kwargs = {"pool_pre_ping": True}
 if "sqlite" in settings.DATABASE_URL:
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 else:
-    engine_kwargs.update({"pool_size": 5, "max_overflow": 10})
+    # Tuned for persistent Render web services connecting via Supabase Session Pooler
+    engine_kwargs.update({
+        "pool_size": 5,
+        "max_overflow": 10,
+        "pool_recycle": 1800,  # recycle connections every 30m to prevent idle disconnects
+        "pool_timeout": 30,    # maximum wait time in seconds to obtain a connection from the pool
+    })
 
 engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
+
 
 if "sqlite" in settings.DATABASE_URL:
     event.listen(engine, "connect", setup_sqlite_mocks)

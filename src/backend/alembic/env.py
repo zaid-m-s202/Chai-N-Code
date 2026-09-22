@@ -45,6 +45,11 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
+    if "sqlite" in str(connectable.url):
+        from sqlalchemy import event
+        from app.database import setup_sqlite_mocks
+        event.listen(connectable, "connect", setup_sqlite_mocks)
+
     with connectable.connect() as connection:
         context.configure(
             connection=connection, target_metadata=target_metadata
@@ -52,6 +57,7 @@ def run_migrations_online() -> None:
 
         with context.begin_transaction():
             context.run_migrations()
+
 
 
 if context.is_offline_mode():

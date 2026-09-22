@@ -9,8 +9,12 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-PropertyType = Literal["parcel", "building", "floor", "unit"]
+PropertyType = Literal[
+    "parcel", "building", "floor", "unit",
+    "underground_utility", "subsurface_parcel", "tunnel", "parking_basement",
+]
 PropertyStatus = Literal["SYNTHETIC", "INFERRED", "DERIVED", "PROVISIONAL", "VERIFIED"]
+
 
 
 class PropertySummary(BaseModel):
@@ -36,8 +40,12 @@ class PropertyDetail(BaseModel):
     source_list: Optional[list[str]] = None
     created_at: datetime
     superseded_by: Optional[UUID] = None
+    ulpin: Optional[str] = None
+    stratum: Optional[str] = "SURFACE"
+    volume_m3: Optional[float] = None
 
     model_config = {"from_attributes": True}
+
 
 
 class ChangeEventResponse(BaseModel):

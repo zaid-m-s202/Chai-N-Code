@@ -44,6 +44,9 @@ export function testApiClientEndpoints() {
     "runFloorEstimator",
     "runFootprintExtractor",
     "analyzeProperty",
+    "checkHealth",
+    "getMapUnits",
+    "getMapUnderground",
   ];
 
   for (const m of requiredMethods) {

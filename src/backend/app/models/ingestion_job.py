@@ -28,7 +28,8 @@ class IngestionJob(Base):
     record_count = Column(Integer, nullable=True)
     error_detail = Column(Text, nullable=True)
 
-    operator_id = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    operator_id = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime(timezone=True), nullable=True)

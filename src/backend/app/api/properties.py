@@ -61,7 +61,11 @@ def _property_to_detail(prop: PropertyObject) -> PropertyDetail:
         source_list=prop.source_list,
         created_at=prop.created_at,
         superseded_by=prop.superseded_by,
+        ulpin=getattr(prop, "ulpin", None),
+        stratum=getattr(prop, "stratum", "SURFACE"),
+        volume_m3=getattr(prop, "volume_m3", None),
     )
+
 
 
 @router.get("/properties", response_model=list[PropertySummary])

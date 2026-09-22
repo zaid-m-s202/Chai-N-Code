@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { API_BASE } from "../api/client";
 
 interface Props {
   isOpen: boolean;
@@ -34,7 +35,7 @@ export const AiCadastralStudioModal: React.FC<Props> = ({ isOpen, onClose, onApp
     setResult(null);
 
     try {
-      const res = await fetch("/api/v1/analysis/extract-footprints", {
+      const res = await fetch(`${API_BASE}/analysis/extract-footprints`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -65,7 +66,7 @@ export const AiCadastralStudioModal: React.FC<Props> = ({ isOpen, onClose, onApp
     setResult(null);
 
     try {
-      const res = await fetch("/api/v1/analysis/segment-floors", {
+      const res = await fetch(`${API_BASE}/analysis/segment-floors`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -98,7 +99,7 @@ export const AiCadastralStudioModal: React.FC<Props> = ({ isOpen, onClose, onApp
     setResult(null);
 
     try {
-      const res = await fetch("/api/v1/analysis/delineate-vertical-parcels", {
+      const res = await fetch(`${API_BASE}/analysis/delineate-vertical-parcels`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -166,7 +167,7 @@ export const AiCadastralStudioModal: React.FC<Props> = ({ isOpen, onClose, onApp
         },
       ];
 
-      const res = await fetch("/api/v1/analysis/validate-3d-topology", {
+      const res = await fetch(`${API_BASE}/analysis/validate-3d-topology`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

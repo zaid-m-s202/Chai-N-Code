@@ -22,8 +22,10 @@ def search_properties(
         PropertyObject.superseded_by.is_(None),
         (
             PropertyObject.three_d_property_id.ilike(term)
+            | PropertyObject.ulpin.ilike(term)
             | PropertyObject.type.ilike(term)
         )
+
     ).limit(limit).all()
 
     return [

@@ -84,9 +84,10 @@ class PropertyRecord(Base):
     sync_time = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Creator / Officer attribution and timestamps
-    created_by = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_by = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
 
     __table_args__ = (
         Index("ix_property_records_ulpin", "ulpin"),

@@ -38,6 +38,9 @@ class PropertyObject(Base):
     # Immutable 3D Property ID  (PRD §5.5)
     three_d_property_id = Column(String(64), unique=True, nullable=False, index=True)
 
+    # Unique Land Parcel Identification Number (Bhu-Aadhaar / ULPIN) where applicable
+    ulpin = Column(String(32), nullable=True, index=True)
+
     # PostGIS geometry — nullable so tests can run on plain SQLite
     geometry = Column(Geometry(geometry_type="GEOMETRY", srid=4326), nullable=True)
 
@@ -66,7 +69,12 @@ class PropertyObject(Base):
     __table_args__ = (
         Index("ix_property_objects_type", "type"),
         Index("ix_property_objects_status", "status"),
+        Index("ix_property_objects_stratum", "stratum"),
+        Index("ix_property_objects_parent_id", "parent_id"),
+        Index("ix_property_objects_superseded_by", "superseded_by"),
+        Index("idx_property_objects_geometry", "geometry", postgresql_using="gist"),
     )
 
     def __repr__(self) -> str:
         return f"<PropertyObject {self.three_d_property_id} [{self.type}/{self.status}]>"
+
