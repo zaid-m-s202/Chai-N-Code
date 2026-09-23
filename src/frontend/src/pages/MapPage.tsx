@@ -285,7 +285,12 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
             "fill-extrusion-opacity": 0.85,
           },
           layout: {
-            visibility: viewMode === "3d_extruded" && layerBuildings ? "visible" : "none",
+            visibility:
+              (viewMode === "3d_extruded" ||
+                (viewMode === "3d_units" && (!unitsData || !unitsData.features || unitsData.features.length === 0))) &&
+              layerBuildings
+                ? "visible"
+                : "none",
           },
         });
 
@@ -647,11 +652,16 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
     if (!m || !m.isStyleLoaded()) return;
 
     try {
+      const showExtrudedBuildings =
+        (viewMode === "3d_extruded" ||
+          (viewMode === "3d_units" && (!unitsData || !unitsData.features || unitsData.features.length === 0))) &&
+        layerBuildings;
+
       if (stratumFilter === "ALL") {
         if (m.getLayer("cadastral-units-3d")) m.setLayoutProperty("cadastral-units-3d", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
         if (m.getLayer("cadastral-units-outline")) m.setLayoutProperty("cadastral-units-outline", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
         if (m.getLayer("cadastral-building-envelope-glass")) m.setLayoutProperty("cadastral-building-envelope-glass", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
-        if (m.getLayer("cadastral-buildings-3d")) m.setLayoutProperty("cadastral-buildings-3d", "visibility", (viewMode === "3d_extruded" && layerBuildings) ? "visible" : "none");
+        if (m.getLayer("cadastral-buildings-3d")) m.setLayoutProperty("cadastral-buildings-3d", "visibility", showExtrudedBuildings ? "visible" : "none");
         if (m.getLayer("underground-infrastructure-3d")) m.setLayoutProperty("underground-infrastructure-3d", "visibility", layerUnderground ? "visible" : "none");
       } else if (stratumFilter === "SUBTERRANEAN") {
         if (m.getLayer("cadastral-units-3d")) m.setLayoutProperty("cadastral-units-3d", "visibility", "none");
@@ -671,13 +681,14 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
         if (m.getLayer("cadastral-units-3d")) m.setLayoutProperty("cadastral-units-3d", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
         if (m.getLayer("cadastral-units-outline")) m.setLayoutProperty("cadastral-units-outline", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
         if (m.getLayer("cadastral-building-envelope-glass")) m.setLayoutProperty("cadastral-building-envelope-glass", "visibility", (viewMode === "3d_units" && layerBuildings) ? "visible" : "none");
+        if (m.getLayer("cadastral-buildings-3d")) m.setLayoutProperty("cadastral-buildings-3d", "visibility", showExtrudedBuildings ? "visible" : "none");
         if (m.getLayer("underground-infrastructure-3d")) m.setLayoutProperty("underground-infrastructure-3d", "visibility", "none");
         m.easeTo({ pitch: 60, duration: 600 });
       }
     } catch (e) {
       console.warn("Stratum filter update error:", e);
     }
-  }, [stratumFilter, viewMode, layerUnderground, layerBuildings]);
+  }, [stratumFilter, viewMode, layerUnderground, layerBuildings, unitsData]);
 
   // ── 5. Selection highlight sync ───────────────────────────────────────────
   useEffect(() => {
@@ -731,7 +742,8 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
         bearing: PUNE_PILOT_BEARING,
         duration: 700,
       });
-      setLayerVis("cadastral-buildings-3d", false);
+      const showBuildingFallback = !unitsData || !unitsData.features || unitsData.features.length === 0;
+      setLayerVis("cadastral-buildings-3d", showBuildingFallback && layerBuildings);
       setLayerVis("cadastral-buildings-dashed-outline", false);
       setLayerVis("cadastral-buildings-flat", false);
       setLayerVis("cadastral-units-3d", true);
@@ -747,7 +759,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
     if (!m) return;
     const targetLayers =
       viewMode === "3d_units"
-        ? ["cadastral-units-3d", "cadastral-units-outline", "cadastral-building-envelope-glass"]
+        ? ["cadastral-units-3d", "cadastral-units-outline", "cadastral-building-envelope-glass", "cadastral-buildings-3d"]
         : ["cadastral-buildings-3d", "cadastral-buildings-flat"];
     targetLayers.forEach((id) => {
       try {
