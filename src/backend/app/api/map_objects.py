@@ -2,7 +2,7 @@
 
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import cast, String
+from sqlalchemy import cast, String, func
 from sqlalchemy.orm import Session
 from geoalchemy2.shape import to_shape
 
@@ -57,8 +57,9 @@ def get_map_objects(
 
 @router.get("/units")
 def get_map_units(
+    bbox: Optional[str] = Query(None, description="Bounding box formatted as 'minLon,minLat,maxLon,maxLat'"),
     type: Optional[str] = Query(None, description="Filter by object type: unit, floor"),
-    limit: int = Query(50000, ge=1, le=100000),
+    limit: int = Query(1000, ge=1, le=50000),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Return unit-level GeoJSON FeatureCollection for 3D MapLibre rendering.
@@ -71,6 +72,18 @@ def get_map_units(
         PropertyObject.type.in_(("unit", "floor") if type is None else (type,)),
         cast(PropertyObject.attributes, String).like("%geojson_geometry%"),
     )
+
+    if bbox:
+        try:
+            parts = [float(v.strip()) for v in bbox.split(",")]
+            if len(parts) == 4:
+                min_lon, min_lat, max_lon, max_lat = parts
+                dialect_name = db.bind.dialect.name if db.bind else ""
+                if dialect_name == "postgresql":
+                    envelope = func.ST_MakeEnvelope(min_lon, min_lat, max_lon, max_lat, 4326)
+                    query = query.filter(func.ST_Intersects(PropertyObject.geometry, envelope))
+        except Exception:
+            pass
 
     props = query.limit(limit).all()
     features = []
