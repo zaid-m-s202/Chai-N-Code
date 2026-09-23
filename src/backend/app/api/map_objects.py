@@ -2,6 +2,7 @@
 
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 from geoalchemy2.shape import to_shape
 
@@ -68,7 +69,7 @@ def get_map_units(
     query = db.query(PropertyObject).filter(
         PropertyObject.superseded_by.is_(None),
         PropertyObject.type.in_(("building", "floor", "unit") if type is None else (type,)),
-        PropertyObject.attributes.like("%geojson_geometry%"),
+        cast(PropertyObject.attributes, String).like("%geojson_geometry%"),
     )
 
     props = query.limit(limit).all()

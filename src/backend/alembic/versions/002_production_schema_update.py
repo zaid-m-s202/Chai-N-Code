@@ -34,11 +34,7 @@ def upgrade() -> None:
     op.create_index("ix_property_objects_parent_id", "property_objects", ["parent_id"])
     op.create_index("ix_property_objects_superseded_by", "property_objects", ["superseded_by"])
 
-    # 3. Add spatial GiST index on property_objects.geometry (PostgreSQL/PostGIS)
-    if is_postgres:
-        op.create_index("idx_property_objects_geometry", "property_objects", ["geometry"], postgresql_using="gist")
-
-    # 4. Create property_records table for legal & land registry linkages
+    # 3. Create property_records table for legal & land registry linkages
     op.create_table(
         "property_records",
         sa.Column("id", UUID_TYPE, primary_key=True),
@@ -113,9 +109,7 @@ def downgrade() -> None:
     # Drop property_records table
     op.drop_table("property_records")
 
-    # Drop property_objects spatial and btree indexes
-    if is_postgres:
-        op.drop_index("idx_property_objects_geometry", table_name="property_objects")
+    # Drop property_objects btree indexes
     op.drop_index("ix_property_objects_superseded_by", table_name="property_objects")
     op.drop_index("ix_property_objects_parent_id", table_name="property_objects")
     op.drop_index("ix_property_objects_stratum", table_name="property_objects")

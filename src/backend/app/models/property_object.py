@@ -32,7 +32,7 @@ class PropertyObject(Base):
     __tablename__ = "property_objects"
 
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    type = Column(String(16), nullable=False)  # parcel | building | floor | unit
+    type = Column(String(32), nullable=False)  # parcel | building | floor | unit | underground types
     parent_id = Column(Uuid(as_uuid=True), ForeignKey("property_objects.id"), nullable=True)
 
     # Immutable 3D Property ID  (PRD §5.5)

@@ -1,9 +1,13 @@
 """Application configuration loaded from environment variables."""
 
 import os
+from pathlib import Path
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+_ENV_FILE = _BACKEND_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -65,7 +69,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=[str(_ENV_FILE), ".env"],
         env_file_encoding="utf-8",
         extra="ignore",
     )
