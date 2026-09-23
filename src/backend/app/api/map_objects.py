@@ -57,7 +57,7 @@ def get_map_objects(
 
 @router.get("/units")
 def get_map_units(
-    type: Optional[str] = Query(None, description="Filter by object type: building, floor, unit"),
+    type: Optional[str] = Query(None, description="Filter by object type: unit, floor"),
     limit: int = Query(50000, ge=1, le=100000),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
@@ -68,7 +68,7 @@ def get_map_units(
     """
     query = db.query(PropertyObject).filter(
         PropertyObject.superseded_by.is_(None),
-        PropertyObject.type.in_(("building", "floor", "unit") if type is None else (type,)),
+        PropertyObject.type.in_(("unit", "floor") if type is None else (type,)),
         cast(PropertyObject.attributes, String).like("%geojson_geometry%"),
     )
 
@@ -102,9 +102,9 @@ def get_map_units(
             "z_min": p.z_min if p.z_min is not None else attrs.get("z_min"),
             "z_max": p.z_max if p.z_max is not None else attrs.get("z_max"),
             "height": attrs.get("height", 3.0),
-            "floor_number": attrs.get("floor_number", 1),
-            "building_id": attrs.get("building_id") or attrs.get("parent_building_id"),
-            "ULPIN": attrs.get("ULPIN") or attrs.get("ulpin"),
+            "floor_number": attrs.get("floor_number") if attrs.get("floor_number") is not None else 1,
+            "building_id": attrs.get("building_id") or attrs.get("parent_building_id") or (str(p.parent_id) if p.parent_id else None),
+            "ULPIN": attrs.get("ULPIN") or attrs.get("ulpin") or p.ulpin,
             "UIPIN": attrs.get("UIPIN") or p.three_d_property_id,
         }
 
