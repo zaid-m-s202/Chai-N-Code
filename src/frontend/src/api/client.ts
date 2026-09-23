@@ -194,8 +194,11 @@ export const api = {
     return res.json();
   },
 
-  async getMapUnits(limit: number = 50000): Promise<any> {
-    const res = await fetch(`${API_BASE}/map/units?limit=${limit}`);
+  async getMapUnits(limit: number = 1000, bbox?: string): Promise<any> {
+    const url = bbox
+      ? `${API_BASE}/map/units?bbox=${encodeURIComponent(bbox)}&limit=${limit}`
+      : `${API_BASE}/map/units?limit=${limit}`;
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch 3D units: HTTP ${res.status}`);
     return res.json();
   },

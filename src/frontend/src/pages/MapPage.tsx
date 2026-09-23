@@ -32,6 +32,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
   const [webglSupported, setWebglSupported]   = useState(true);
   const [layerBuildings, setLayerBuildings]   = useState(true);
   const [layerUnderground, setLayerUnderground] = useState(false);
+  const [mapLoaded, setMapLoaded]             = useState(false);
   const [searchQuery, setSearchQuery]         = useState("");
   const [explosionGap, setExplosionGap] = useState<number>(0); // default 0m Stacked view matching Photo 1
   const [selectedFloor, setSelectedFloor] = useState<string>("ALL"); // "ALL", "-1", "1", "2", "3", "4+"
@@ -47,85 +48,93 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef          = useRef<maplibregl.Map | null>(null);
 
-  // ── 1. Load cadastral buildings & units (API first, static fallback) ─────
+  // ── 1. Load cadastral buildings & units (Parallel, bounded API first) ─────
   const loadMapData = async () => {
     setLoading(true);
     setError(null);
-    let uData: any = null;
-    let bldgData: any = null;
-    let fromApi = false;
 
-    // A. Try live backend API for 3D units
-    try {
-      const res = await fetch(`${API_BASE}/map/units?limit=50000`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.features && json.features.length > 0) {
-          uData = json;
-          fromApi = true;
-          console.log(`Loaded ${json.features.length} units from Live Database API.`);
-        }
-      }
-    } catch (e) {
-      console.warn("Backend /map/units not reachable, falling back to static file:", e);
-    }
+    // Pilot bounding box around Pune SCMS campus: [minLon, minLat, maxLon, maxLat]
+    const pilotBbox = "73.815,18.535,73.845,18.565";
 
-    // B. Fallback to static units file if API had 0 features or failed
-    if (!uData) {
-      try {
-        const res = await fetch("/cadastral_3d_units.geojson");
+    // A. Building footprints (fast static local GeoJSON)
+    const bldgPromise = fetch("/cadastral_3d_buildings.geojson")
+      .then(async (res) => {
         if (res.ok) {
-          uData = await res.json();
-          console.log("Loaded units from static cadastral_3d_units.geojson fallback.");
+          const data = await res.json();
+          setGeoData(data);
+          return data;
+        }
+        return null;
+      })
+      .catch((e) => {
+        console.warn("Buildings file not reachable:", e);
+        return null;
+      });
+
+    // B. Live 3D Units fetch: use bounded viewport request to prevent 502/OOM
+    const unitsPromise = (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/map/units?bbox=${pilotBbox}&limit=1000`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.features && json.features.length > 0) {
+            setUnitsData(json);
+            setDataSource("api");
+            console.log(`Loaded ${json.features.length} units from Live Database API (bbox).`);
+            return json;
+          }
         }
       } catch (e) {
-        console.warn("Static units file not reachable:", e);
+        console.warn("Targeted /map/units request failed:", e);
       }
-    }
 
-    // C. Load building footprints
-    try {
-      const res = await fetch("/cadastral_3d_buildings.geojson");
-      if (res.ok) {
-        bldgData = await res.json();
-      }
-    } catch (e) {
-      console.warn("Buildings file not reachable:", e);
-    }
-
-    // D. Load underground infrastructure (API first, static fallback)
-    let ugData: any = null;
-    try {
-      const res = await fetch(`${API_BASE}/map/underground?limit=5000`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.features && json.features.length > 0) {
-          ugData = json;
+      // Fallback: bounded general limit (500) if bbox query returned 0 features
+      try {
+        const res = await fetch(`${API_BASE}/map/units?limit=500`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.features && json.features.length > 0) {
+            setUnitsData(json);
+            setDataSource("api");
+            console.log(`Loaded ${json.features.length} units from Live Database API (limit=500).`);
+            return json;
+          }
         }
+      } catch (e) {
+        console.warn("Fallback /map/units request failed:", e);
       }
-    } catch (e) {
-      console.warn("Underground API endpoint not reachable:", e);
-    }
+      return null;
+    })();
 
-    if (!ugData) {
+    // C. Underground infrastructure (API first, static fallback)
+    const ugPromise = (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/map/underground?limit=5000`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.features && json.features.length > 0) {
+            setUndergroundData(json);
+            return json;
+          }
+        }
+      } catch (e) {
+        console.warn("Underground API endpoint not reachable:", e);
+      }
+
       try {
         const res = await fetch("/underground_infrastructure.geojson");
         if (res.ok) {
-          ugData = await res.json();
+          const json = await res.json();
+          setUndergroundData(json);
+          return json;
         }
       } catch (e) {
         console.warn("Static underground file not reachable:", e);
       }
-    }
+      return null;
+    })();
 
-    if (bldgData) setGeoData(bldgData);
-    if (uData) {
-      setUnitsData(uData);
-      setDataSource(fromApi ? "api" : "static");
-    }
-    if (ugData) {
-      setUndergroundData(ugData);
-    }
+    const [bldgData, uData] = await Promise.all([bldgPromise, unitsPromise, ugPromise]);
     if (!bldgData && !uData) {
       setError("Could not load cadastral datasets from API or static storage.");
     }
@@ -140,8 +149,9 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
   const refreshFromDb = async () => {
     setIsRefreshing(true);
     setUploadStatus("Querying fresh 3D property records & subterranean assets from database...");
+    const pilotBbox = "73.815,18.535,73.845,18.565";
     try {
-      const res = await fetch(`${API_BASE}/map/units?limit=50000`);
+      const res = await fetch(`${API_BASE}/map/units?bbox=${pilotBbox}&limit=1000`);
       if (res.ok) {
         const json = await res.json();
         if (json && json.features && json.features.length > 0) {
@@ -204,7 +214,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
   };
 
 
-  // ── 2. Initialise MapLibre GL ─────────────────────────────────────────────
+  // ── 2. Initialise MapLibre GL (Independent lifecycle, mounted once) ───────
   useEffect(() => {
     if (!mapContainerRef.current || viewMode === "cesium") return;
 
@@ -234,31 +244,47 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
       map.on("load", () => {
-        if (!geoData) return;
-
-        // ── A. Buildings source ──────────────────────────────────────────────
-        map.addSource("cadastral_3d_buildings", {
-          type: "geojson",
-          data: geoData,
+        setMapLoaded(true);
+        map.jumpTo({
+          center: PUNE_PILOT_CENTER,
+          zoom: PUNE_PILOT_ZOOM,
+          pitch: viewMode === "2d" ? 0 : PUNE_PILOT_PITCH,
+          bearing: viewMode === "2d" ? 0 : PUNE_PILOT_BEARING,
         });
+      });
 
-        // ── B. Units source ──────────────────────────────────────────────────
-        if (unitsData) {
-          map.addSource("cadastral_3d_units", {
-            type: "geojson",
-            data: unitsData,
-          });
-        }
+      mapRef.current = map;
+    } catch (err) {
+      console.warn("WebGL init failed, using fallback:", err);
+      setWebglSupported(false);
+    }
 
-        // ── C. Underground infrastructure source ──────────────────────────────
-        if (undergroundData) {
-          map.addSource("underground_infrastructure", {
-            type: "geojson",
-            data: undergroundData,
-          });
-        }
+    return () => {
+      setMapLoaded(false);
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode === "cesium"]);
 
-        // ── 1. Black dashed outlines (Standard cadastral footprint styling for 2D mode) ───
+  // ── 2a. Sync Buildings Source & Layers ────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded || !geoData) return;
+
+    const existingSource = map.getSource("cadastral_3d_buildings") as maplibregl.GeoJSONSource;
+    if (existingSource) {
+      existingSource.setData(geoData);
+    } else {
+      map.addSource("cadastral_3d_buildings", {
+        type: "geojson",
+        data: geoData,
+      });
+
+      // 1. Black dashed outlines (Standard cadastral footprint styling for 2D mode)
+      if (!map.getLayer("cadastral-buildings-dashed-outline")) {
         map.addLayer({
           id: "cadastral-buildings-dashed-outline",
           type: "line",
@@ -272,8 +298,14 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
             visibility: viewMode === "2d" ? "visible" : "none",
           },
         });
+      }
 
-        // ── 2. Standard 3D Building Envelopes (Clean architectural massing) ────
+      // 2. Standard 3D Building Envelopes (Clean architectural massing)
+      if (!map.getLayer("cadastral-buildings-3d")) {
+        const showBuildingFallback =
+          (viewMode === "3d_extruded" ||
+            (viewMode === "3d_units" && (!unitsData || !unitsData.features || unitsData.features.length === 0))) &&
+          layerBuildings;
         map.addLayer({
           id: "cadastral-buildings-3d",
           type: "fill-extrusion",
@@ -285,16 +317,13 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
             "fill-extrusion-opacity": 0.85,
           },
           layout: {
-            visibility:
-              (viewMode === "3d_extruded" ||
-                (viewMode === "3d_units" && (!unitsData || !unitsData.features || unitsData.features.length === 0))) &&
-              layerBuildings
-                ? "visible"
-                : "none",
+            visibility: showBuildingFallback ? "visible" : "none",
           },
         });
+      }
 
-        // ── 3. Flat footprint highlight for 2D mode ──────────────────────────
+      // 3. Flat footprint highlight for 2D mode
+      if (!map.getLayer("cadastral-buildings-flat")) {
         map.addLayer({
           id: "cadastral-buildings-flat",
           type: "fill",
@@ -307,8 +336,10 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
             visibility: viewMode === "2d" ? "visible" : "none",
           },
         });
+      }
 
-        // ── 4. Translucent Glass Building Envelope (for Unit Explorer) ────────
+      // 4. Translucent Glass Building Envelope (for Unit Explorer)
+      if (!map.getLayer("cadastral-building-envelope-glass")) {
         map.addLayer({
           id: "cadastral-building-envelope-glass",
           type: "fill-extrusion",
@@ -323,80 +354,10 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
             visibility: viewMode === "3d_units" && layerBuildings ? "visible" : "none",
           },
         });
+      }
 
-        // ── 5. 3D Floor & Unit Extrusion with Exploded Separation ────────────
-        if (unitsData) {
-          const gap = explosionGap;
-          map.addLayer({
-            id: "cadastral-units-3d",
-            type: "fill-extrusion",
-            source: "cadastral_3d_units",
-            paint: {
-              "fill-extrusion-color": ["coalesce", ["get", "color"], "#f59e0b"],
-              "fill-extrusion-base": [
-                "+",
-                ["coalesce", ["get", "z_min"], 0],
-                [
-                  "*",
-                  [
-                    "case",
-                    ["==", ["get", "floor_number"], -1], -1,
-                    [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
-                    0,
-                  ],
-                  gap,
-                ],
-              ],
-              "fill-extrusion-height": [
-                "+",
-                ["coalesce", ["get", "z_max"], 3],
-                [
-                  "*",
-                  [
-                    "case",
-                    ["==", ["get", "floor_number"], -1], -1,
-                    [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
-                    0,
-                  ],
-                  gap,
-                ],
-              ],
-              "fill-extrusion-opacity": 0.92,
-            },
-            layout: {
-              visibility: viewMode === "3d_units" ? "visible" : "none",
-            },
-          });
-
-          // Unit line boundary
-          map.addLayer({
-            id: "cadastral-units-outline",
-            type: "line",
-            source: "cadastral_3d_units",
-            paint: {
-              "line-color": "#0f172a",
-              "line-width": 1.2,
-              "line-opacity": 0.5,
-            },
-            layout: {
-              visibility: viewMode === "3d_units" ? "visible" : "none",
-            },
-          });
-
-          // Unit selected highlight layer
-          map.addLayer({
-            id: "cadastral-unit-selected",
-            type: "line",
-            source: "cadastral_3d_units",
-            filter: ["==", "three_d_property_id", ""],
-            paint: {
-              "line-color": "#ef4444",
-              "line-width": 3,
-            },
-          });
-        }
-
-        // ── 6. Selected building outline ─────────────────────────────────────
+      // 6. Selected building outline
+      if (!map.getLayer("cadastral-buildings-selected")) {
         map.addLayer({
           id: "cadastral-buildings-selected",
           type: "line",
@@ -407,168 +368,268 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
             "line-width": 3,
           },
         });
+      }
 
-        // ── 7. Underground Subterranean Infrastructure 3D & Outline Layers ──
-        if (undergroundData) {
-          map.addLayer({
-            id: "underground-infrastructure-3d",
-            type: "fill-extrusion",
-            source: "underground_infrastructure",
-            paint: {
-              "fill-extrusion-color": ["coalesce", ["get", "color"], "#ef4444"],
-              "fill-extrusion-height": [
-                "+",
-                ["abs", ["-", ["coalesce", ["get", "z_max"], 0], ["coalesce", ["get", "z_min"], -5]]],
-                2,
-              ],
-              "fill-extrusion-base": 0,
-              "fill-extrusion-opacity": 0.85,
-            },
-            layout: {
-              visibility: layerUnderground ? "visible" : "none",
-            },
-          });
+      // Click & hover handlers on buildings
+      ["cadastral-buildings-3d", "cadastral-buildings-flat"].forEach((layer) => {
+        map.on("click", layer, (e: any) => {
+          const feat = e.features?.[0];
+          if (!feat) return;
 
-          map.addLayer({
-            id: "underground-infrastructure-outline",
-            type: "line",
-            source: "underground_infrastructure",
-            paint: {
-              "line-color": ["coalesce", ["get", "color"], "#ef4444"],
-              "line-width": 2.5,
-              "line-dasharray": [2, 1],
-            },
-            layout: {
-              visibility: layerUnderground ? "visible" : "none",
-            },
-          });
+          const three_d_property_id = feat.properties?.three_d_property_id;
+          const ulpin = feat.properties?.ULPIN;
 
-          // Click on underground infrastructure
-          map.on("click", "underground-infrastructure-3d", (e: any) => {
-            const feat = e.features?.[0];
-            if (!feat) return;
-            const threeD_id = feat.properties?.three_d_property_id || feat.properties?.id;
-            setSelectedFeature({
-              type: "Feature",
-              properties: {
-                ...feat.properties,
-                three_d_property_id: threeD_id,
-                stratum: "SUBTERRANEAN",
-              },
-              geometry: feat.geometry,
-            });
-          });
-
-          map.on("mouseenter", "underground-infrastructure-3d", () => {
-            map.getCanvas().style.cursor = "pointer";
-          });
-          map.on("mouseleave", "underground-infrastructure-3d", () => {
-            map.getCanvas().style.cursor = "";
-          });
-        }
-
-        // ── 7. Click & Hover Handlers ────────────────────────────────────────
-        // Click on 3D Units
-        if (unitsData) {
-          map.on("click", "cadastral-units-3d", (e: any) => {
-            const feat = e.features?.[0];
-            if (!feat) return;
-
-            const uipin = feat.properties?.UIPIN || feat.properties?.three_d_property_id;
-            console.log("3D Unit clicked:", {
-              uipin,
-              unit_number: feat.properties?.unit_number,
-              floor_name: feat.properties?.floor_name,
-              z_min: feat.properties?.z_min,
-              z_max: feat.properties?.z_max,
-            });
-
-            if (uipin && map.getLayer("cadastral-unit-selected")) {
-              map.setFilter("cadastral-unit-selected", ["==", "three_d_property_id", uipin]);
-            }
-
-            const unitFeature: BuildingFeature = {
-              type: "Feature",
-              properties: { ...feat.properties, three_d_property_id: uipin },
-              geometry: feat.geometry,
-            };
-            setSelectedFeature(unitFeature);
-          });
-
-          map.on("mouseenter", "cadastral-units-3d", () => {
-            map.getCanvas().style.cursor = "pointer";
-          });
-          map.on("mouseleave", "cadastral-units-3d", () => {
-            map.getCanvas().style.cursor = "";
-          });
-        }
-
-        // Click on Buildings
-        const bldgLayers = ["cadastral-buildings-3d", "cadastral-buildings-flat"];
-        bldgLayers.forEach((layer) => {
-          map.on("click", layer, (e: any) => {
-            const feat = e.features?.[0];
-            if (!feat) return;
-
-            const three_d_property_id = feat.properties?.three_d_property_id;
-            const ulpin = feat.properties?.ULPIN;
-
-            if (three_d_property_id && map.getLayer("cadastral-buildings-selected")) {
-              map.setFilter("cadastral-buildings-selected", ["==", "three_d_property_id", three_d_property_id]);
-            }
-
-            const fullFeature = geoData?.features?.find(
-              (f: any) =>
-                (three_d_property_id && f.properties?.three_d_property_id === three_d_property_id) ||
-                (ulpin && f.properties?.ULPIN === ulpin)
-            );
-
-            setSelectedFeature(fullFeature ?? (feat as BuildingFeature));
-          });
-
-          map.on("mouseenter", layer, () => {
-            map.getCanvas().style.cursor = "pointer";
-          });
-          map.on("mouseleave", layer, () => {
-            map.getCanvas().style.cursor = "";
-          });
-        });
-
-        // ── 8. Focus on Pilot Building (SCMS Pune Univ) exactly as in Photo 1 ──
-        map.jumpTo({
-          center: PUNE_PILOT_CENTER,
-          zoom: PUNE_PILOT_ZOOM,
-          pitch: PUNE_PILOT_PITCH,
-          bearing: PUNE_PILOT_BEARING,
-        });
-
-        // Pre-select Unit 1B of SCMS building to replicate the clear systematic view in Photo 1
-        const defaultUnitId = "27-21-13-255-000022-B001-F01-U012";
-        const defaultUnit = unitsData?.features?.find(
-          (f: any) => f.properties?.three_d_property_id === defaultUnitId
-        );
-        if (defaultUnit) {
-          setSelectedFeature(defaultUnit as BuildingFeature);
-          if (map.getLayer("cadastral-unit-selected")) {
-            map.setFilter("cadastral-unit-selected", ["==", "three_d_property_id", defaultUnitId]);
+          if (three_d_property_id && map.getLayer("cadastral-buildings-selected")) {
+            map.setFilter("cadastral-buildings-selected", ["==", "three_d_property_id", three_d_property_id]);
           }
-        }
+
+          const fullFeature = geoData?.features?.find(
+            (f: any) =>
+              (three_d_property_id && f.properties?.three_d_property_id === three_d_property_id) ||
+              (ulpin && f.properties?.ULPIN === ulpin)
+          );
+
+          setSelectedFeature(fullFeature ?? (feat as BuildingFeature));
+        });
+
+        map.on("mouseenter", layer, () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", layer, () => {
+          map.getCanvas().style.cursor = "";
+        });
+      });
+    }
+  }, [mapLoaded, geoData]);
+
+  // ── 2b. Sync Units Source & Layers ────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded || !unitsData) return;
+
+    const existingSource = map.getSource("cadastral_3d_units") as maplibregl.GeoJSONSource;
+    if (existingSource) {
+      existingSource.setData(unitsData);
+    } else {
+      map.addSource("cadastral_3d_units", {
+        type: "geojson",
+        data: unitsData,
       });
 
-      mapRef.current = map;
-    } catch (err) {
-      console.warn("WebGL init failed, using fallback:", err);
-      setWebglSupported(false);
+      const gap = explosionGap;
+      // 5. 3D Floor & Unit Extrusion with Exploded Separation
+      if (!map.getLayer("cadastral-units-3d")) {
+        map.addLayer({
+          id: "cadastral-units-3d",
+          type: "fill-extrusion",
+          source: "cadastral_3d_units",
+          paint: {
+            "fill-extrusion-color": ["coalesce", ["get", "color"], "#f59e0b"],
+            "fill-extrusion-base": [
+              "+",
+              ["coalesce", ["get", "z_min"], 0],
+              [
+                "*",
+                [
+                  "case",
+                  ["==", ["get", "floor_number"], -1], -1,
+                  [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
+                  0,
+                ],
+                gap,
+              ],
+            ],
+            "fill-extrusion-height": [
+              "+",
+              ["coalesce", ["get", "z_max"], 3],
+              [
+                "*",
+                [
+                  "case",
+                  ["==", ["get", "floor_number"], -1], -1,
+                  [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
+                  0,
+                ],
+                gap,
+              ],
+            ],
+            "fill-extrusion-opacity": 0.92,
+          },
+          layout: {
+            visibility: viewMode === "3d_units" ? "visible" : "none",
+          },
+        });
+      }
+
+      // Unit line boundary
+      if (!map.getLayer("cadastral-units-outline")) {
+        map.addLayer({
+          id: "cadastral-units-outline",
+          type: "line",
+          source: "cadastral_3d_units",
+          paint: {
+            "line-color": "#0f172a",
+            "line-width": 1.2,
+            "line-opacity": 0.5,
+          },
+          layout: {
+            visibility: viewMode === "3d_units" ? "visible" : "none",
+          },
+        });
+      }
+
+      // Unit selected highlight layer
+      if (!map.getLayer("cadastral-unit-selected")) {
+        map.addLayer({
+          id: "cadastral-unit-selected",
+          type: "line",
+          source: "cadastral_3d_units",
+          filter: ["==", "three_d_property_id", ""],
+          paint: {
+            "line-color": "#ef4444",
+            "line-width": 3,
+          },
+        });
+      }
+
+      // Click & hover on units
+      map.on("click", "cadastral-units-3d", (e: any) => {
+        const feat = e.features?.[0];
+        if (!feat) return;
+
+        const uipin = feat.properties?.UIPIN || feat.properties?.three_d_property_id;
+        console.log("3D Unit clicked:", {
+          uipin,
+          unit_number: feat.properties?.unit_number,
+          floor_name: feat.properties?.floor_name,
+          z_min: feat.properties?.z_min,
+          z_max: feat.properties?.z_max,
+        });
+
+        if (uipin && map.getLayer("cadastral-unit-selected")) {
+          map.setFilter("cadastral-unit-selected", ["==", "three_d_property_id", uipin]);
+        }
+
+        const unitFeature: BuildingFeature = {
+          type: "Feature",
+          properties: { ...feat.properties, three_d_property_id: uipin },
+          geometry: feat.geometry,
+        };
+        setSelectedFeature(unitFeature);
+      });
+
+      map.on("mouseenter", "cadastral-units-3d", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "cadastral-units-3d", () => {
+        map.getCanvas().style.cursor = "";
+      });
     }
 
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
+    // When unit data arrives, if in 3d_units mode, hide solid building extrusion fallback
+    // and show units extrusion
+    if (viewMode === "3d_units") {
+      if (map.getLayer("cadastral-buildings-3d")) {
+        map.setLayoutProperty("cadastral-buildings-3d", "visibility", "none");
       }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geoData, unitsData, viewMode]);
+      if (map.getLayer("cadastral-units-3d")) {
+        map.setLayoutProperty("cadastral-units-3d", "visibility", layerBuildings ? "visible" : "none");
+      }
+      if (map.getLayer("cadastral-units-outline")) {
+        map.setLayoutProperty("cadastral-units-outline", "visibility", layerBuildings ? "visible" : "none");
+      }
+      if (map.getLayer("cadastral-building-envelope-glass")) {
+        map.setLayoutProperty("cadastral-building-envelope-glass", "visibility", layerBuildings ? "visible" : "none");
+      }
+    }
+
+    // Pre-select Unit 1B of SCMS building if available
+    const defaultUnitId = "27-21-13-255-000022-B001-F01-U012";
+    const defaultUnit = unitsData?.features?.find(
+      (f: any) => f.properties?.three_d_property_id === defaultUnitId
+    );
+    if (defaultUnit) {
+      setSelectedFeature(defaultUnit as BuildingFeature);
+      if (map.getLayer("cadastral-unit-selected")) {
+        map.setFilter("cadastral-unit-selected", ["==", "three_d_property_id", defaultUnitId]);
+      }
+    }
+  }, [mapLoaded, unitsData]);
+
+  // ── 2c. Sync Underground Source & Layers ──────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded || !undergroundData) return;
+
+    const existingSource = map.getSource("underground_infrastructure") as maplibregl.GeoJSONSource;
+    if (existingSource) {
+      existingSource.setData(undergroundData);
+    } else {
+      map.addSource("underground_infrastructure", {
+        type: "geojson",
+        data: undergroundData,
+      });
+
+      if (!map.getLayer("underground-infrastructure-3d")) {
+        map.addLayer({
+          id: "underground-infrastructure-3d",
+          type: "fill-extrusion",
+          source: "underground_infrastructure",
+          paint: {
+            "fill-extrusion-color": ["coalesce", ["get", "color"], "#ef4444"],
+            "fill-extrusion-height": [
+              "+",
+              ["abs", ["-", ["coalesce", ["get", "z_max"], 0], ["coalesce", ["get", "z_min"], -5]]],
+              2,
+            ],
+            "fill-extrusion-base": 0,
+            "fill-extrusion-opacity": 0.85,
+          },
+          layout: {
+            visibility: layerUnderground ? "visible" : "none",
+          },
+        });
+      }
+
+      if (!map.getLayer("underground-infrastructure-outline")) {
+        map.addLayer({
+          id: "underground-infrastructure-outline",
+          type: "line",
+          source: "underground_infrastructure",
+          paint: {
+            "line-color": ["coalesce", ["get", "color"], "#ef4444"],
+            "line-width": 2.5,
+            "line-dasharray": [2, 1],
+          },
+          layout: {
+            visibility: layerUnderground ? "visible" : "none",
+          },
+        });
+      }
+
+      map.on("click", "underground-infrastructure-3d", (e: any) => {
+        const feat = e.features?.[0];
+        if (!feat) return;
+        const threeD_id = feat.properties?.three_d_property_id || feat.properties?.id;
+        setSelectedFeature({
+          type: "Feature",
+          properties: {
+            ...feat.properties,
+            three_d_property_id: threeD_id,
+            stratum: "SUBTERRANEAN",
+          },
+          geometry: feat.geometry,
+        });
+      });
+
+      map.on("mouseenter", "underground-infrastructure-3d", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "underground-infrastructure-3d", () => {
+        map.getCanvas().style.cursor = "";
+      });
+    }
+  }, [mapLoaded, undergroundData]);
 
   // ── 3. Dynamic Exploded View Separation Update ────────────────────────────
   useEffect(() => {
@@ -688,7 +749,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
     } catch (e) {
       console.warn("Stratum filter update error:", e);
     }
-  }, [stratumFilter, viewMode, layerUnderground, layerBuildings, unitsData]);
+  }, [stratumFilter, viewMode, layerUnderground, layerBuildings, unitsData, mapLoaded]);
 
   // ── 5. Selection highlight sync ───────────────────────────────────────────
   useEffect(() => {
