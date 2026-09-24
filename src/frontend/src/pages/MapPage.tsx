@@ -47,14 +47,87 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef          = useRef<maplibregl.Map | null>(null);
+  const loadedBoundsRef = useRef<{ west: number; south: number; east: number; north: number } | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // ── 1. Load cadastral buildings & units (Parallel, bounded API first) ─────
+  // ── Dynamic Viewport 3D Units Fetcher ─────────────────────────────────────
+  const fetchUnitsForViewport = async (map: maplibregl.Map, force = false) => {
+    if (!map) return;
+
+    try {
+      const bounds = map.getBounds();
+      if (!bounds) return;
+
+      const west = bounds.getWest();
+      const south = bounds.getSouth();
+      const east = bounds.getEast();
+      const north = bounds.getNorth();
+
+      if (isNaN(west) || isNaN(south) || isNaN(east) || isNaN(north)) return;
+
+      // Avoid unnecessary requests: if viewport remains within previously loaded buffer, do not request again
+      if (!force && loadedBoundsRef.current) {
+        const lb = loadedBoundsRef.current;
+        if (
+          west >= lb.west &&
+          east <= lb.east &&
+          south >= lb.south &&
+          north <= lb.north
+        ) {
+          return;
+        }
+      }
+
+      // Abort any pending in-flight request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      // Expand bounds with ~25% buffer padding so small movements do not immediately require another request
+      const dLon = east - west;
+      const dLat = north - south;
+      const bufferRatio = 0.25;
+      const buffered = {
+        west: west - dLon * bufferRatio,
+        south: south - dLat * bufferRatio,
+        east: east + dLon * bufferRatio,
+        north: north + dLat * bufferRatio,
+      };
+
+      const bboxStr = `${buffered.west.toFixed(6)},${buffered.south.toFixed(6)},${buffered.east.toFixed(6)},${buffered.north.toFixed(6)}`;
+
+      const res = await fetch(`${API_BASE}/map/units?bbox=${bboxStr}&limit=1000`, {
+        signal: controller.signal,
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.features) {
+          setUnitsData(json);
+          setDataSource("api");
+          loadedBoundsRef.current = buffered;
+
+          // If MapLibre source already exists, update it immediately via setData()
+          const src = map.getSource("cadastral_3d_units") as maplibregl.GeoJSONSource;
+          if (src) {
+            src.setData(json);
+          }
+          console.log(`Loaded ${json.features.length} 3D units for viewport bbox [${bboxStr}]`);
+        }
+      }
+    } catch (e: any) {
+      if (e.name !== "AbortError") {
+        console.warn("Viewport /map/units request failed:", e);
+      }
+    }
+  };
+
+  // ── 1. Load cadastral buildings & underground ─────────────────────────────
   const loadMapData = async () => {
     setLoading(true);
     setError(null);
-
-    // Pilot bounding box around Pune SCMS campus: [minLon, minLat, maxLon, maxLat]
-    const pilotBbox = "73.815,18.535,73.845,18.565";
 
     // A. Building footprints (fast static local GeoJSON)
     const bldgPromise = fetch("/cadastral_3d_buildings.geojson")
@@ -71,42 +144,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
         return null;
       });
 
-    // B. Live 3D Units fetch: use bounded viewport request to prevent 502/OOM
-    const unitsPromise = (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/map/units?bbox=${pilotBbox}&limit=1000`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json && json.features && json.features.length > 0) {
-            setUnitsData(json);
-            setDataSource("api");
-            console.log(`Loaded ${json.features.length} units from Live Database API (bbox).`);
-            return json;
-          }
-        }
-      } catch (e) {
-        console.warn("Targeted /map/units request failed:", e);
-      }
-
-      // Fallback: bounded general limit (500) if bbox query returned 0 features
-      try {
-        const res = await fetch(`${API_BASE}/map/units?limit=500`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json && json.features && json.features.length > 0) {
-            setUnitsData(json);
-            setDataSource("api");
-            console.log(`Loaded ${json.features.length} units from Live Database API (limit=500).`);
-            return json;
-          }
-        }
-      } catch (e) {
-        console.warn("Fallback /map/units request failed:", e);
-      }
-      return null;
-    })();
-
-    // C. Underground infrastructure (API first, static fallback)
+    // B. Underground infrastructure (API first, static fallback)
     const ugPromise = (async () => {
       try {
         const res = await fetch(`${API_BASE}/map/underground?limit=5000`);
@@ -134,8 +172,8 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
       return null;
     })();
 
-    const [bldgData, uData] = await Promise.all([bldgPromise, unitsPromise, ugPromise]);
-    if (!bldgData && !uData) {
+    const [bldgData] = await Promise.all([bldgPromise, ugPromise]);
+    if (!bldgData) {
       setError("Could not load cadastral datasets from API or static storage.");
     }
     setLoading(false);
@@ -149,15 +187,9 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
   const refreshFromDb = async () => {
     setIsRefreshing(true);
     setUploadStatus("Querying fresh 3D property records & subterranean assets from database...");
-    const pilotBbox = "73.815,18.535,73.845,18.565";
     try {
-      const res = await fetch(`${API_BASE}/map/units?bbox=${pilotBbox}&limit=1000`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.features && json.features.length > 0) {
-          setUnitsData(json);
-          setDataSource("api");
-        }
+      if (mapRef.current) {
+        await fetchUnitsForViewport(mapRef.current, true);
       }
 
       // Also refresh underground infrastructure
@@ -251,6 +283,11 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
           pitch: viewMode === "2d" ? 0 : PUNE_PILOT_PITCH,
           bearing: viewMode === "2d" ? 0 : PUNE_PILOT_BEARING,
         });
+        fetchUnitsForViewport(map);
+      });
+
+      map.on("moveend", () => {
+        fetchUnitsForViewport(map);
       });
 
       mapRef.current = map;
@@ -261,6 +298,9 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
 
     return () => {
       setMapLoaded(false);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
