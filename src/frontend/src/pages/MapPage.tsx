@@ -308,7 +308,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, viewMode === "cesium"]);
+  }, [viewMode === "cesium"]);
 
   // ── 2a. Sync Buildings Source & Layers ────────────────────────────────────
   useEffect(() => {
