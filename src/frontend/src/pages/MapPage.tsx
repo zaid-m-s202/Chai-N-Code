@@ -249,6 +249,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
   // ── 2. Initialise MapLibre GL (Independent lifecycle, mounted once) ───────
   useEffect(() => {
     if (!mapContainerRef.current || viewMode === "cesium") return;
+    if (mapRef.current) return;
 
     let map: maplibregl.Map;
     try {
@@ -307,7 +308,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode === "cesium"]);
+  }, [loading, viewMode === "cesium"]);
 
   // ── 2a. Sync Buildings Source & Layers ────────────────────────────────────
   useEffect(() => {
@@ -1304,14 +1305,29 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
           className="map-viewport-card"
           style={{ padding: 0, overflow: "hidden", minHeight: "600px", position: "relative" }}
         >
-          {loading ? (
-            <div className="loader" style={{ padding: "100px" }}>
-              Loading 3D cadastral features…
-            </div>
-          ) : viewMode === "cesium" ? (
+          {viewMode === "cesium" ? (
             <CesiumPlaceholder onBack={() => handleModeChange("3d_extruded")} />
           ) : webglSupported ? (
-            <div ref={mapContainerRef} style={{ width: "100%", height: "600px" }} />
+            <>
+              <div ref={mapContainerRef} style={{ width: "100%", height: "600px" }} />
+              {loading && (
+                <div
+                  className="loader"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    zIndex: 10,
+                    background: "rgba(15, 23, 42, 0.75)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    pointerEvents: "none",
+                  }}
+                >
+                  Loading 3D cadastral features…
+                </div>
+              )}
+            </>
           ) : (
             <SvgFallback features={geoData?.features ?? []} selected={selectedFeature} onSelect={setSelectedFeature} />
           )}
