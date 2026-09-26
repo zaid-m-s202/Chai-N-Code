@@ -50,10 +50,6 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
   const loadedBoundsRef = useRef<{ west: number; south: number; east: number; north: number } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // TEMPORARY RUNTIME DIAGNOSTIC: remove after confirming whether MapLibre can
-  // render the unit polygons as extrusions in the target browser.
-  const FORCE_UNIT_EXTRUSION_HEIGHT_FOR_DEBUG = true;
-
   // ── Dynamic Viewport 3D Units Fetcher ─────────────────────────────────────
   const fetchUnitsForViewport = async (map: maplibregl.Map, force = false) => {
     if (!map) return;
@@ -256,10 +252,6 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
     if (mapRef.current) return;
 
     let map: maplibregl.Map;
-    let onMapError: ((event: any) => void) | undefined;
-    let onWebglContextLost: ((event: Event) => void) | undefined;
-    let onWebglContextRestored: ((event: Event) => void) | undefined;
-    let canvas: HTMLCanvasElement | undefined;
     try {
       map = new maplibregl.Map({
         container: mapContainerRef.current,
@@ -283,20 +275,6 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
 
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
-
-      onMapError = (event: any) => {
-        console.error("[3D DEBUG] MapLibre error", event?.error ?? event);
-      };
-      onWebglContextLost = (event: Event) => {
-        console.error("[3D DEBUG] WebGL context lost", event);
-      };
-      onWebglContextRestored = (event: Event) => {
-        console.info("[3D DEBUG] WebGL context restored", event);
-      };
-      canvas = map.getCanvas();
-      map.on("error", onMapError);
-      canvas.addEventListener("webglcontextlost", onWebglContextLost);
-      canvas.addEventListener("webglcontextrestored", onWebglContextRestored);
 
       map.on("load", () => {
         setMapLoaded(true);
@@ -325,9 +303,6 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
         abortControllerRef.current.abort();
       }
       if (mapRef.current) {
-        if (onMapError) mapRef.current.off("error", onMapError);
-        if (canvas && onWebglContextLost) canvas.removeEventListener("webglcontextlost", onWebglContextLost);
-        if (canvas && onWebglContextRestored) canvas.removeEventListener("webglcontextrestored", onWebglContextRestored);
         mapRef.current.remove();
         mapRef.current = null;
       }
@@ -607,91 +582,6 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
       if (map.getLayer("cadastral-building-envelope-glass")) {
         map.setLayoutProperty("cadastral-building-envelope-glass", "visibility", layerBuildings ? "visible" : "none");
       }
-    }
-
-    const source = map.getSource("cadastral_3d_units") as maplibregl.GeoJSONSource | undefined;
-    const layer = map.getLayer("cadastral-units-3d");
-    const unitPaintBeforeRenderProbe = layer ? {
-      base: map.getPaintProperty("cadastral-units-3d", "fill-extrusion-base"),
-      height: map.getPaintProperty("cadastral-units-3d", "fill-extrusion-height"),
-      opacity: map.getPaintProperty("cadastral-units-3d", "fill-extrusion-opacity"),
-    } : undefined;
-
-    // TEMPORARY: an unambiguous topmost 50 m extrusion isolates MapLibre
-    // rendering from Z values, styling, and building-layer occlusion.
-    // Do not retain this override after the browser diagnostic has been observed.
-    if (FORCE_UNIT_EXTRUSION_HEIGHT_FOR_DEBUG && layer && viewMode === "3d_units") {
-      try {
-        if (map.getLayer("cadastral-buildings-3d")) {
-          map.setLayoutProperty("cadastral-buildings-3d", "visibility", "none");
-        }
-        map.moveLayer("cadastral-units-3d");
-        map.setPaintProperty("cadastral-units-3d", "fill-extrusion-base", 0);
-        map.setPaintProperty("cadastral-units-3d", "fill-extrusion-height", 50);
-        map.setPaintProperty("cadastral-units-3d", "fill-extrusion-opacity", 1);
-      } catch (diagnosticError) {
-        console.error("[3D DEBUG] could not apply topmost 50 m extrusion test", diagnosticError);
-      }
-    }
-
-    const firstUnit = unitsData.features?.[0];
-    console.groupCollapsed("[3D DEBUG] cadastral unit extrusion state");
-    console.log("[3D DEBUG] viewMode", viewMode);
-    console.log("[3D DEBUG] mapLoaded", mapLoaded);
-    console.log("[3D DEBUG] unitsData feature count", unitsData.features?.length ?? 0);
-    console.log("[3D DEBUG] source exists", Boolean(source), source);
-    console.log("[3D DEBUG] layer exists", Boolean(layer), layer);
-    console.log("[3D DEBUG] layer type", layer?.type);
-    console.log("[3D DEBUG] layer visibility", map.getLayoutProperty("cadastral-units-3d", "visibility"));
-    console.log("[3D DEBUG] layer source", layer?.source);
-    console.log("[3D DEBUG] current pitch", map.getPitch());
-    console.log("[3D DEBUG] current bearing", map.getBearing());
-    console.log("[3D DEBUG] current zoom", map.getZoom());
-    console.log("[3D DEBUG] fill-extrusion-base", map.getPaintProperty("cadastral-units-3d", "fill-extrusion-base"));
-    console.log("[3D DEBUG] fill-extrusion-height", map.getPaintProperty("cadastral-units-3d", "fill-extrusion-height"));
-    console.log("[3D DEBUG] fill-extrusion-opacity", map.getPaintProperty("cadastral-units-3d", "fill-extrusion-opacity"));
-    console.log("[3D DEBUG] fill-extrusion-color", map.getPaintProperty("cadastral-units-3d", "fill-extrusion-color"));
-    console.log("[3D DEBUG] paint before 50 m render probe", unitPaintBeforeRenderProbe);
-    console.log("[3D DEBUG] first unit", {
-      type: firstUnit?.properties?.type,
-      geometryType: firstUnit?.geometry?.type,
-      z_min: firstUnit?.properties?.z_min,
-      z_max: firstUnit?.properties?.z_max,
-      coordinates: firstUnit?.geometry?.coordinates,
-    });
-    console.groupEnd();
-
-    if (viewMode === "3d_units" && layer) {
-      map.once("idle", () => {
-        const styleLayers = map.getStyle().layers ?? [];
-        const unitLayerIndex = styleLayers.findIndex((styleLayer) => styleLayer.id === "cadastral-units-3d");
-        const buildingLayerIndex = styleLayers.findIndex((styleLayer) => styleLayer.id === "cadastral-buildings-3d");
-        const nearbyLayers = styleLayers
-          .map((styleLayer, index) => ({
-            index,
-            id: styleLayer.id,
-            type: styleLayer.type,
-            source: "source" in styleLayer ? styleLayer.source : undefined,
-          }))
-          .filter(({ index, type }) => Math.abs(index - unitLayerIndex) <= 4 || type === "fill" || type === "fill-extrusion");
-        const renderedUnits = map.queryRenderedFeatures({ layers: ["cadastral-units-3d"] });
-
-        console.groupCollapsed("[3D DEBUG] unit extrusion render probe");
-        console.log("[3D DEBUG] units layer index", unitLayerIndex);
-        console.log("[3D DEBUG] buildings layer index", buildingLayerIndex);
-        console.log("[3D DEBUG] relevant style layers", nearbyLayers);
-        console.log("[3D DEBUG] rendered unit feature count", renderedUnits.length);
-        console.log("[3D DEBUG] first rendered unit", renderedUnits[0] && {
-          geometryType: renderedUnits[0].geometry?.type,
-          properties: renderedUnits[0].properties,
-        });
-        console.log("[3D DEBUG] diagnostic paint", {
-          base: map.getPaintProperty("cadastral-units-3d", "fill-extrusion-base"),
-          height: map.getPaintProperty("cadastral-units-3d", "fill-extrusion-height"),
-          opacity: map.getPaintProperty("cadastral-units-3d", "fill-extrusion-opacity"),
-        });
-        console.groupEnd();
-      });
     }
 
     // Pre-select Unit 1B of SCMS building if available
