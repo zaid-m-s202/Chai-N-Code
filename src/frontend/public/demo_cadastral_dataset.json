@@ -1,0 +1,261 @@
+{
+  "metadata": {
+    "title": "3D Cadastral Intelligence & Property Identification System - Demo Seed Dataset",
+    "description": "Comprehensive pilot dataset featuring Indian urban cadastral structures, 3D spatial hierarchies, multi-source observations, deliberate topology violations, legal land registry records, and audit events.",
+    "version": "1.0.0",
+    "crs": "EPSG:4326",
+    "jurisdictions": [
+      {
+        "state": "Maharashtra",
+        "district": "Pune",
+        "ward": "Ward 120 - Shivaji Nagar",
+        "ulpin_prefix": "INMH0234567"
+      },
+      {
+        "state": "Karnataka",
+        "district": "Bengaluru Urban",
+        "ward": "Ward 151 - Koramangala",
+        "ulpin_prefix": "INKA0987654"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "officer_sharma",
+      "role": "VERIFYING_OFFICER",
+      "description": "Statutory municipal verification officer with sign-off authority"
+    },
+    {
+      "username": "surveyor_verma",
+      "role": "FIELD_SURVEYOR",
+      "description": "GIS field surveyor submitting raw drone and DGPS observations"
+    },
+    {
+      "username": "citizen_patel",
+      "role": "PUBLIC_VIEWER",
+      "description": "Public citizen accessing open cadastral spatial layers"
+    },
+    {
+      "username": "admin_cadastre",
+      "role": "ADMIN",
+      "description": "System administrator managing system topology rules and configurations"
+    }
+  ],
+  "properties": [
+    {
+      "three_d_property_id": "INMH0234567-B000-F00-U000",
+      "type": "parcel",
+      "status": "VERIFIED",
+      "confidence": 0.98,
+      "ulpin": "INMH0234567",
+      "parent_id": null,
+      "attributes": {
+        "ward": "Ward 120 - Shivaji Nagar",
+        "city": "Pune",
+        "area_sqm": 2450.0,
+        "zoning": "Commercial-Mixed"
+      }
+    },
+    {
+      "three_d_property_id": "INMH0234567-B001-F00-U000",
+      "type": "building",
+      "status": "VERIFIED",
+      "confidence": 0.95,
+      "parent_id": "INMH0234567-B000-F00-U000",
+      "z_min": 560.0,
+      "z_max": 588.0,
+      "attributes": {
+        "name": "Kalyani Commercial Apex",
+        "height": 28.0,
+        "floor_count": 8,
+        "structure_type": "RCC Framed",
+        "construction_year": 2021
+      }
+    },
+    {
+      "three_d_property_id": "INMH0234567-B001-F01-U000",
+      "type": "floor",
+      "status": "VERIFIED",
+      "confidence": 0.92,
+      "parent_id": "INMH0234567-B001-F00-U000",
+      "z_min": 560.0,
+      "z_max": 563.5,
+      "attributes": {
+        "floor_index": 1,
+        "floor_label": "Ground Floor",
+        "height": 3.5,
+        "use": "Commercial/Banking"
+      }
+    },
+    {
+      "three_d_property_id": "INMH0234567-B001-F01-U001",
+      "type": "unit",
+      "status": "VERIFIED",
+      "confidence": 1.0,
+      "parent_id": "INMH0234567-B001-F01-U000",
+      "z_min": 560.0,
+      "z_max": 563.5,
+      "attributes": {
+        "unit_number": "101",
+        "carpet_area_sqm": 240.0,
+        "use": "Bank Branch",
+        "door_no": "101-A"
+      }
+    },
+    {
+      "three_d_property_id": "INMH0234567-B001-F01-U002",
+      "type": "unit",
+      "status": "PROVISIONAL",
+      "confidence": 0.88,
+      "parent_id": "INMH0234567-B001-F01-U000",
+      "z_min": 560.0,
+      "z_max": 563.5,
+      "attributes": {
+        "unit_number": "102",
+        "carpet_area_sqm": 195.0,
+        "use": "Retail Pharmacy",
+        "door_no": "101-B"
+      }
+    },
+    {
+      "three_d_property_id": "INMH0234567-B002-F00-U000",
+      "type": "building",
+      "status": "PROVISIONAL",
+      "confidence": 0.78,
+      "parent_id": "INMH0234567-B000-F00-U000",
+      "z_min": 560.0,
+      "z_max": 574.0,
+      "attributes": {
+        "name": "Apex Residential Annexe",
+        "height": 14.0,
+        "floor_count": 4,
+        "use": "Residential"
+      }
+    },
+    {
+      "three_d_property_id": "INMH0234567-B002-F01-U001",
+      "type": "unit",
+      "status": "PROVISIONAL",
+      "confidence": 0.75,
+      "parent_id": "INMH0234567-B002-F01-U000",
+      "z_min": 560.0,
+      "z_max": 563.0,
+      "attributes": {
+        "unit_number": "G-01",
+        "carpet_area_sqm": 120.0,
+        "use": "2BHK Residence"
+      }
+    },
+    {
+      "three_d_property_id": "INMH0234567-B002-F01-U002",
+      "type": "unit",
+      "status": "PROVISIONAL",
+      "confidence": 0.72,
+      "parent_id": "INMH0234567-B002-F01-U000",
+      "z_min": 560.0,
+      "z_max": 563.0,
+      "attributes": {
+        "unit_number": "G-02",
+        "carpet_area_sqm": 115.0,
+        "use": "2BHK Residence"
+      }
+    },
+    {
+      "three_d_property_id": "INKA0987654-B000-F00-U000",
+      "type": "parcel",
+      "status": "VERIFIED",
+      "confidence": 0.96,
+      "ulpin": "INKA0987654",
+      "attributes": {
+        "ward": "Ward 151 - Koramangala",
+        "city": "Bengaluru",
+        "area_sqm": 1850.0
+      }
+    },
+    {
+      "three_d_property_id": "INKA0987654-B001-F00-U000",
+      "type": "building",
+      "status": "DERIVED",
+      "confidence": 0.71,
+      "parent_id": "INKA0987654-B000-F00-U000",
+      "z_min": 920.0,
+      "z_max": 938.5,
+      "attributes": {
+        "name": "Greenview Heights",
+        "height": 18.5,
+        "floor_count": 6,
+        "derivation_algorithm": "dsm_dem_height_adapter_v1"
+      }
+    }
+  ],
+  "conflicts": [
+    {
+      "rule_code": "VR-02",
+      "severity": "ERROR",
+      "status": "OPEN",
+      "target_property": "INMH0234567-B002-F01-U001",
+      "description": "VR-02 Unit Overlap: Unit G-01 overlaps by 14.2% with Unit G-02 on Floor G of Apex Residential Annexe. Blocks verification under VR-09."
+    },
+    {
+      "rule_code": "VR-04",
+      "severity": "WARNING",
+      "status": "OPEN",
+      "target_property": "INMH0234567-B002-F00-U000",
+      "description": "VR-04 Vertical Gap: Elevation gap of 0.8m detected between Floor 1 top (563.0m) and Floor 2 base (563.8m)."
+    },
+    {
+      "rule_code": "VR-01",
+      "severity": "ERROR",
+      "status": "RESOLVED",
+      "target_property": "INMH0234567-B001-F00-U000",
+      "description": "VR-01: Boundary overhang of 0.12m on North corner resolved after re-survey."
+    }
+  ],
+  "legal_records": [
+    {
+      "three_d_property_id": "INMH0234567-B001-F01-U001",
+      "ulpin": "INMH0234567",
+      "owner_party_id": "IN-MAH-REG-2021-998812-P",
+      "registration_number": "MH-PUN-HAV-2021/008892",
+      "rights_type": "freehold",
+      "encumbrances": [
+        {
+          "type": "mortgage",
+          "institution": "State Bank of India (Commercial Branch)",
+          "amount_inr": 25000000,
+          "charge_id": "SBI-CHG-2021-00441",
+          "status": "ACTIVE"
+        }
+      ],
+      "linkage_status": "LINKED",
+      "source_system": "MAHARASHTRA_IGR_DEED_REGISTRY"
+    },
+    {
+      "three_d_property_id": "INMH0234567-B001-F01-U002",
+      "ulpin": "INMH0234567",
+      "owner_party_id": "IN-MAH-REG-2022-774431-S",
+      "registration_number": "MH-PUN-HAV-2022/014521",
+      "rights_type": "strata_title",
+      "encumbrances": [],
+      "linkage_status": "LINKED",
+      "source_system": "MAHARASHTRA_IGR_DEED_REGISTRY"
+    },
+    {
+      "three_d_property_id": "INKA0987654-B001-F00-U000",
+      "ulpin": "INKA0987654",
+      "owner_party_id": "IN-KAR-REG-2024-331190-C",
+      "registration_number": "KA-BLR-KOR-2024/003412",
+      "rights_type": "leasehold",
+      "encumbrances": [
+        {
+          "type": "municipal_tax_lien",
+          "amount_inr": 48200,
+          "issuing_authority": "BBMP Revenue Cell",
+          "status": "PENDING_REMEDY"
+        }
+      ],
+      "linkage_status": "PENDING",
+      "source_system": "KARNATAKA_KAVERI_2_PORTAL"
+    }
+  ]
+}

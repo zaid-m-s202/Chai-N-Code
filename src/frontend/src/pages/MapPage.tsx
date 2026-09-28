@@ -6,6 +6,11 @@ import { MultiSensorIngestModal } from "../components/MultiSensorIngestModal";
 import { AiCadastralStudioModal } from "../components/AiCadastralStudioModal";
 import { API_BASE } from "../api/client";
 
+// Ensure MapLibre GL JS loads worker script from static assets in production builds
+if (typeof window !== "undefined" && (maplibregl as any).config) {
+  (maplibregl as any).config.WORKER_URL = "/assets/maplibre-gl-worker.mjs";
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface MapPageProps {
   currentRole?: string;
@@ -19,6 +24,33 @@ export const PUNE_PILOT_CENTER: [number, number] = [73.82934, 18.54866];
 export const PUNE_PILOT_ZOOM = 17.5;
 export const PUNE_PILOT_PITCH = 58;
 export const PUNE_PILOT_BEARING = -22;
+
+function getFeatureCoordinate(feature: any): [number, number] | null {
+  try {
+    let coords = feature.geometry?.coordinates;
+    if (!coords) return null;
+    while (Array.isArray(coords[0])) {
+      coords = coords[0];
+    }
+    if (typeof coords[0] === "number" && typeof coords[1] === "number") {
+      return [coords[0], coords[1]];
+    }
+  } catch (_) {}
+  return null;
+}
+
+function filterFeaturesByBbox(
+  geojson: any,
+  bbox: { west: number; south: number; east: number; north: number }
+): any {
+  if (!geojson || !geojson.features) return { type: "FeatureCollection", features: [] };
+  const filtered = geojson.features.filter((f: any) => {
+    const pt = getFeatureCoordinate(f);
+    if (!pt) return false;
+    return pt[0] >= bbox.west && pt[0] <= bbox.east && pt[1] >= bbox.south && pt[1] <= bbox.north;
+  });
+  return { type: "FeatureCollection", features: filtered };
+}
 
 export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFICER" }) => {
   const [geoData, setGeoData]           = useState<any>(null);
@@ -49,6 +81,7 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
   const mapRef          = useRef<maplibregl.Map | null>(null);
   const loadedBoundsRef = useRef<{ west: number; south: number; east: number; north: number } | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const staticUnitsCacheRef = useRef<any>(null);
 
   // ── Dynamic Viewport 3D Units Fetcher ─────────────────────────────────────
   const fetchUnitsForViewport = async (map: maplibregl.Map, force = false) => {
@@ -98,24 +131,58 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
 
       const bboxStr = `${buffered.west.toFixed(6)},${buffered.south.toFixed(6)},${buffered.east.toFixed(6)},${buffered.north.toFixed(6)}`;
 
-      const res = await fetch(`${API_BASE}/map/units?bbox=${bboxStr}&limit=1000`, {
-        signal: controller.signal,
-      });
+      let fetchedJson: any = null;
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.features) {
-          setUnitsData(json);
-          setDataSource("api");
-          loadedBoundsRef.current = buffered;
+      // 1. Try Live Database API first
+      try {
+        const res = await fetch(`${API_BASE}/map/units?bbox=${bboxStr}&limit=1000`, {
+          signal: controller.signal,
+        });
 
-          // If MapLibre source already exists, update it immediately via setData()
-          const src = map.getSource("cadastral_3d_units") as maplibregl.GeoJSONSource;
-          if (src) {
-            src.setData(json);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.features && json.features.length > 0) {
+            fetchedJson = json;
+            setDataSource("api");
           }
-          console.log(`Loaded ${json.features.length} 3D units for viewport bbox [${bboxStr}]`);
         }
+      } catch (err: any) {
+        if (err.name === "AbortError") return;
+        // Backend offline / Vercel static deployment mode
+      }
+
+      // 2. Fallback to static units cache or pilot dataset
+      if (!fetchedJson) {
+        if (staticUnitsCacheRef.current) {
+          const filtered = filterFeaturesByBbox(staticUnitsCacheRef.current, buffered);
+          if (filtered.features.length > 0) {
+            fetchedJson = filtered;
+            setDataSource("static");
+          }
+        } else {
+          try {
+            const pilotRes = await fetch("/cadastral_3d_units_pilot.geojson");
+            if (pilotRes.ok) {
+              const pilotJson = await pilotRes.json();
+              if (pilotJson && pilotJson.features) {
+                fetchedJson = pilotJson;
+                setDataSource("static");
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (fetchedJson && fetchedJson.features) {
+        setUnitsData(fetchedJson);
+        loadedBoundsRef.current = buffered;
+
+        // If MapLibre source already exists, update it immediately via setData()
+        const src = map.getSource("cadastral_3d_units") as maplibregl.GeoJSONSource;
+        if (src) {
+          src.setData(fetchedJson);
+        }
+        console.log(`Loaded ${fetchedJson.features.length} 3D units for viewport bbox [${bboxStr}]`);
       }
     } catch (e: any) {
       if (e.name !== "AbortError") {
@@ -144,7 +211,51 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
         return null;
       });
 
-    // B. Underground infrastructure (API first, static fallback)
+    // B. 3D Cadastral Units (Pilot dataset for instant 3D rendering on mount)
+    const unitsPromise = (async () => {
+      // 1. Try pilot units first for instant rendering (<50ms)
+      try {
+        const res = await fetch("/cadastral_3d_units_pilot.geojson");
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.features && json.features.length > 0) {
+            setUnitsData(json);
+            setDataSource("static");
+            // Also preload full static units in background for seamless viewport navigation
+            fetch("/cadastral_3d_units.geojson")
+              .then((r) => (r.ok ? r.json() : null))
+              .then((fullJson) => {
+                if (fullJson && fullJson.features) {
+                  staticUnitsCacheRef.current = fullJson;
+                }
+              })
+              .catch(() => {});
+            return json;
+          }
+        }
+      } catch (e) {
+        console.warn("Pilot units static file not reachable:", e);
+      }
+
+      // 2. Fallback: full static units file
+      try {
+        const res = await fetch("/cadastral_3d_units.geojson");
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.features && json.features.length > 0) {
+            setUnitsData(json);
+            staticUnitsCacheRef.current = json;
+            setDataSource("static");
+            return json;
+          }
+        }
+      } catch (e) {
+        console.warn("Full static units file not reachable:", e);
+      }
+      return null;
+    })();
+
+    // C. Underground infrastructure (API first, static fallback)
     const ugPromise = (async () => {
       try {
         const res = await fetch(`${API_BASE}/map/underground?limit=5000`);
@@ -172,8 +283,8 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
       return null;
     })();
 
-    const [bldgData] = await Promise.all([bldgPromise, ugPromise]);
-    if (!bldgData) {
+    const [bldgData, uData] = await Promise.all([bldgPromise, unitsPromise, ugPromise]);
+    if (!bldgData && !uData) {
       setError("Could not load cadastral datasets from API or static storage.");
     }
     setLoading(false);
@@ -467,31 +578,39 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
           paint: {
             "fill-extrusion-color": ["coalesce", ["get", "color"], "#f59e0b"],
             "fill-extrusion-base": [
-              "+",
-              ["coalesce", ["get", "z_min"], 0],
+              "max",
+              0,
               [
-                "*",
+                "+",
+                ["coalesce", ["get", "z_min"], 0],
                 [
-                  "case",
-                  ["==", ["get", "floor_number"], -1], -1,
-                  [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
-                  0,
+                  "*",
+                  [
+                    "case",
+                    ["==", ["get", "floor_number"], -1], 0,
+                    [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
+                    0,
+                  ],
+                  gap,
                 ],
-                gap,
               ],
             ],
             "fill-extrusion-height": [
-              "+",
-              ["coalesce", ["get", "z_max"], 3],
+              "max",
+              1,
               [
-                "*",
+                "+",
+                ["coalesce", ["get", "z_max"], 3],
                 [
-                  "case",
-                  ["==", ["get", "floor_number"], -1], -1,
-                  [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
-                  0,
+                  "*",
+                  [
+                    "case",
+                    ["==", ["get", "floor_number"], -1], 0,
+                    [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
+                    0,
+                  ],
+                  gap,
                 ],
-                gap,
               ],
             ],
             "fill-extrusion-opacity": 0.92,
@@ -679,32 +798,40 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
 
     const gap = explosionGap;
     const baseExpr: maplibregl.ExpressionSpecification = [
-      "+",
-      ["coalesce", ["get", "z_min"], 0],
+      "max",
+      0,
       [
-        "*",
+        "+",
+        ["coalesce", ["get", "z_min"], 0],
         [
-          "case",
-          ["==", ["get", "floor_number"], -1], -1,
-          [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
-          0,
+          "*",
+          [
+            "case",
+            ["==", ["get", "floor_number"], -1], 0,
+            [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
+            0,
+          ],
+          gap,
         ],
-        gap,
       ],
     ];
 
     const heightExpr: maplibregl.ExpressionSpecification = [
-      "+",
-      ["coalesce", ["get", "z_max"], 3],
+      "max",
+      1,
       [
-        "*",
+        "+",
+        ["coalesce", ["get", "z_max"], 3],
         [
-          "case",
-          ["==", ["get", "floor_number"], -1], -1,
-          [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
-          0,
+          "*",
+          [
+            "case",
+            ["==", ["get", "floor_number"], -1], 0,
+            [">", ["get", "floor_number"], 0], ["-", ["get", "floor_number"], 1],
+            0,
+          ],
+          gap,
         ],
-        gap,
       ],
     ];
 

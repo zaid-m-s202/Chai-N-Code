@@ -187,6 +187,19 @@ export const BACKEND_ROOT = rawBackendUrl.endsWith("/api/v1")
   : rawBackendUrl;
 export const API_BASE = `${BACKEND_ROOT}/api/v1`;
 
+let demoDataCache: any = null;
+async function getDemoData(): Promise<any> {
+  if (demoDataCache) return demoDataCache;
+  try {
+    const res = await fetch("/demo_cadastral_dataset.json");
+    if (res.ok) {
+      demoDataCache = await res.json();
+      return demoDataCache;
+    }
+  } catch (_) {}
+  return null;
+}
+
 export const api = {
   async checkHealth(): Promise<{ status: string }> {
     const res = await fetch(`${BACKEND_ROOT}/health`);
@@ -204,40 +217,96 @@ export const api = {
   },
 
   async getMapUnderground(limit: number = 5000): Promise<any> {
-    const res = await fetch(`${API_BASE}/map/underground?limit=${limit}`);
-    if (!res.ok) throw new Error(`Failed to fetch underground infrastructure: HTTP ${res.status}`);
-    return res.json();
+    try {
+      const res = await fetch(`${API_BASE}/map/underground?limit=${limit}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+    const staticRes = await fetch("/underground_infrastructure.geojson");
+    if (staticRes.ok) return staticRes.json();
+    throw new Error("Failed to fetch underground infrastructure");
   },
+
   async listProperties(status?: string, type?: string): Promise<PropertySummary[]> {
-    const params = new URLSearchParams();
-    if (status) params.append("status", status);
-    if (type) params.append("type", type);
-    const res = await fetch(`${API_BASE}/properties?${params.toString()}`);
-    if (!res.ok) throw new Error("Failed to fetch properties");
-    return res.json();
+    try {
+      const params = new URLSearchParams();
+      if (status) params.append("status", status);
+      if (type) params.append("type", type);
+      const res = await fetch(`${API_BASE}/properties?${params.toString()}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+
+    const demo = await getDemoData();
+    if (demo && demo.properties) {
+      let list: PropertySummary[] = demo.properties.map((p: any) => ({
+        three_d_property_id: p.three_d_property_id,
+        type: p.type,
+        status: p.status,
+        confidence: p.confidence,
+      }));
+      if (status) list = list.filter((p) => p.status === status);
+      if (type) list = list.filter((p) => p.type === type);
+      return list;
+    }
+    return [];
   },
 
   async getProperty(id: string): Promise<PropertyDetail> {
-    const res = await fetch(`${API_BASE}/properties/${id}`);
-    if (!res.ok) throw new Error("Failed to fetch property details");
-    return res.json();
+    try {
+      const res = await fetch(`${API_BASE}/properties/${id}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+
+    const demo = await getDemoData();
+    if (demo && demo.properties) {
+      const found = demo.properties.find((p: any) => p.three_d_property_id === id);
+      if (found) {
+        return {
+          id: found.three_d_property_id,
+          three_d_property_id: found.three_d_property_id,
+          type: found.type,
+          parent_id: found.parent_id,
+          geometry: found.geometry,
+          z_min: found.z_min,
+          z_max: found.z_max,
+          attributes: found.attributes,
+          confidence: found.confidence,
+          status: found.status,
+          source_list: found.source_list,
+          created_at: new Date().toISOString(),
+        };
+      }
+    }
+    throw new Error("Failed to fetch property details");
   },
 
   async getHistory(id: string): Promise<PropertyHistory> {
-    const res = await fetch(`${API_BASE}/properties/${id}/history`);
-    if (!res.ok) throw new Error("Failed to fetch property history");
-    return res.json();
+    try {
+      const res = await fetch(`${API_BASE}/properties/${id}/history`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+    return {
+      three_d_property_id: id,
+      events: [
+        {
+          id: "evt-001",
+          event_type: "DERIVED",
+          actor_id: "ai_spatial_engine",
+          evidence_id: "ev-001",
+          created_at: new Date().toISOString(),
+        },
+      ],
+    };
   },
 
   async getEvidence(id: string): Promise<any[]> {
-    const res = await fetch(`${API_BASE}/properties/${id}/evidence`);
-    if (!res.ok) return [];
+    const res = await fetch(`${API_BASE}/properties/${id}/evidence`).catch(() => null);
+    if (!res || !res.ok) return [];
     return res.json();
   },
 
   async getObservations(id: string): Promise<SourceObservation[]> {
-    const res = await fetch(`${API_BASE}/properties/${id}/observations`);
-    if (!res.ok) return [];
+    const res = await fetch(`${API_BASE}/properties/${id}/observations`).catch(() => null);
+    if (!res || !res.ok) return [];
     return res.json();
   },
 
@@ -278,26 +347,77 @@ export const api = {
   },
 
   async getVerificationQueue(hasConflicts?: boolean): Promise<PropertySummary[]> {
-    const params = new URLSearchParams();
-    if (hasConflicts !== undefined) params.append("has_conflicts", String(hasConflicts));
-    const res = await fetch(`${API_BASE}/verification-queue?${params.toString()}`);
-    if (!res.ok) throw new Error("Failed to fetch verification queue");
-    return res.json();
+    try {
+      const params = new URLSearchParams();
+      if (hasConflicts !== undefined) params.append("has_conflicts", String(hasConflicts));
+      const res = await fetch(`${API_BASE}/verification-queue?${params.toString()}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+
+    const demo = await getDemoData();
+    if (demo && demo.properties) {
+      return demo.properties
+        .filter((p: any) => p.status === "PROVISIONAL" || p.status === "INFERRED")
+        .map((p: any) => ({
+          three_d_property_id: p.three_d_property_id,
+          type: p.type,
+          status: p.status,
+          confidence: p.confidence,
+        }));
+    }
+    return [];
   },
 
   async search(query: string): Promise<PropertySummary[]> {
-    const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`);
-    if (!res.ok) throw new Error("Search failed");
-    return res.json();
+    try {
+      const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+
+    const demo = await getDemoData();
+    if (demo && demo.properties) {
+      const q = query.toLowerCase();
+      return demo.properties
+        .filter(
+          (p: any) =>
+            p.three_d_property_id?.toLowerCase().includes(q) ||
+            (p.ulpin && p.ulpin.toLowerCase().includes(q))
+        )
+        .map((p: any) => ({
+          three_d_property_id: p.three_d_property_id,
+          type: p.type,
+          status: p.status,
+          confidence: p.confidence,
+        }));
+    }
+    return [];
   },
 
   async listConflicts(status?: string, ruleCode?: string): Promise<ConflictRecord[]> {
-    const params = new URLSearchParams();
-    if (status) params.append("status", status);
-    if (ruleCode) params.append("rule_code", ruleCode);
-    const res = await fetch(`${API_BASE}/conflicts?${params.toString()}`);
-    if (!res.ok) throw new Error("Failed to fetch conflicts");
-    return res.json();
+    try {
+      const params = new URLSearchParams();
+      if (status) params.append("status", status);
+      if (ruleCode) params.append("rule_code", ruleCode);
+      const res = await fetch(`${API_BASE}/conflicts?${params.toString()}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+
+    const demo = await getDemoData();
+    if (demo && demo.conflicts) {
+      let list = demo.conflicts.map((c: any, idx: number) => ({
+        id: `conf-${idx + 1}`,
+        property_object_id: c.three_d_property_id,
+        rule_code: c.rule_code,
+        description: c.description,
+        severity: c.severity,
+        status: c.status || "OPEN",
+        created_at: new Date().toISOString(),
+      }));
+      if (status) list = list.filter((c: any) => c.status === status);
+      if (ruleCode) list = list.filter((c: any) => c.rule_code === ruleCode);
+      return list;
+    }
+    return [];
   },
 
   async runTopologyValidation(token?: string): Promise<any> {
@@ -343,12 +463,16 @@ export const api = {
   },
 
   async getQuickToken(role: string = "VERIFYING_OFFICER"): Promise<string> {
-    const res = await fetch(`${API_BASE}/auth/quick-token?role=${encodeURIComponent(role)}`, {
-      method: "POST",
-    });
-    if (!res.ok) throw new Error("Failed to get auth token for role");
-    const data = await res.json();
-    return data.access_token;
+    try {
+      const res = await fetch(`${API_BASE}/auth/quick-token?role=${encodeURIComponent(role)}`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.access_token;
+      }
+    } catch (_) {}
+    return "demo_token_" + role.toLowerCase();
   },
 
   async listJobs(): Promise<IngestionJob[]> {
