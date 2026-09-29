@@ -1031,14 +1031,6 @@ export const MapPage: React.FC<MapPageProps> = ({ currentRole = "VERIFYING_OFFIC
 
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="header-actions">
-        <div>
-          <h2>3D Cadastral Portal: Visualize · Search · Inspect · Download</h2>
-          <p className="subtitle">
-            MapLibre GL 2D/3D extruded layers • Pune Pilot Ward •{" "}
-            {featureCount.toLocaleString()} buildings loaded • PRD §5.10
-          </p>
-        </div>
-
         {/* View mode toggle */}
         <div className="tab-group-sm">
           <button

@@ -78,7 +78,7 @@ export default function App() {
         <div className="gov-branding">
           <div className="emblem-box">🏛️</div>
           <div>
-            <h1>3D Cadastral Portal: Visualize · Search · Inspect · Download</h1>
+            <h1>GeoULPIN 3D</h1>
             <p className="gov-subtitle">
               National Geospatial Cadastral System • Spatial Identity (ULPIN-B-F-U) • Evidence-Backed
             </p>
